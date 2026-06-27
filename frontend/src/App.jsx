@@ -7,6 +7,7 @@ export default function ComplianceAnalyzer() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [rechecking, setRechecking] = useState(null);  // ✅ Track which violation is being rechecked
 
   const API_BASE_URL = 'https://uipath-agenthack-2026.onrender.com/api';
 
@@ -53,67 +54,107 @@ export default function ComplianceAnalyzer() {
       CRITICAL: 'bg-red-100 text-red-800 border-red-300',
       HIGH: 'bg-orange-100 text-orange-800 border-orange-300',
       MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
-      LOW: 'bg-green-100 text-green-800 border-green-300'
+      LOW: 'bg-green-100 text-green-800 border-green-300',
+      RESOLVED: 'bg-green-100 text-green-800 border-green-300'
     };
     return colors[severity] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!file) {
-    setError("Please select a file");
-    return;
-  }
+  // ✅ NEW: Handle recheck
+  const handleRecheck = async (violationIndex) => {
+    try {
+      setRechecking(violationIndex);
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/workflow/${result.caseId}/recheck/${violationIndex}`
+      );
 
-  setLoading(true);
-  setError(null);
-  setResult(null);
+      console.log('✅ Recheck result:', response.data);
 
-  try {
-    const formData = new FormData();
-    formData.append("document", file);
+      // Update violations with recheck result
+      const updatedViolations = result.violations.map((v, idx) => {
+        if (idx === violationIndex) {
+          return {
+            ...v,
+            reChecked: true,
+            reCheckResult: response.data.data.reCheckResult.reCheckResult,
+            reCheckConfidence: response.data.data.reCheckResult.confidence,
+            explanation: response.data.data.reCheckResult.explanation
+          };
+        }
+        return v;
+      });
 
-    // Step 1: Upload (intake)
-    const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" }
-    });
-    
-    const caseId = uploadRes.data.data.caseId;
-    console.log('✅ Case created:', caseId);
+      setResult({
+        ...result,
+        violations: updatedViolations
+      });
 
-    // Step 2: Extraction
-    await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
-    console.log('✅ Extraction done');
+      // Show success toast (optional)
+      alert(`✅ Violation rechecked: ${response.data.data.reCheckResult.status}`);
+    } catch (err) {
+      console.error('Recheck error:', err);
+      alert('⚠️ Recheck failed: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setRechecking(null);
+    }
+  };
 
-    // Step 3: Retrieval
-    await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
-    console.log('✅ Retrieval done');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) {
+      setError("Please select a file");
+      return;
+    }
 
-    // Step 4: Compliance
-    const complianceRes = await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
-    console.log('✅ Compliance done');
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
-    // Step 5: Get final case with report
-    const workflow = await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
-    console.log(`workflow created for caseId: ${caseId}`, workflow.data)
-    const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
-    const finalCase = finalRes.data.data;
+    try {
+      const formData = new FormData();
+      formData.append("document", file);
 
-    setResult({
-      caseId,
-      violations: finalCase.violations || [],
-      report: finalCase.report || {}
-    });
+      // Step 1: Upload (intake)
+      const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      
+      const caseId = uploadRes.data.data.caseId;
+      console.log('✅ Case created:', caseId);
 
-    setFile(null);
-  } catch (err) {
-    console.error('Full error:', err);
-    setError(err.response?.data?.message || "Processing failed. Check backend logs.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Step 2: Extraction
+      await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
+      console.log('✅ Extraction done');
 
+      // Step 3: Retrieval
+      await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
+      console.log('✅ Retrieval done');
+
+      // Step 4: Compliance
+      const complianceRes = await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
+      console.log('✅ Compliance done');
+
+      // Step 5: Get final case with report
+      const workflow = await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
+      console.log(`workflow created for caseId: ${caseId}`, workflow.data)
+      const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
+      const finalCase = finalRes.data.data;
+
+      setResult({
+        caseId,
+        violations: finalCase.violations || [],
+        report: finalCase.report || {}
+      });
+
+      setFile(null);
+    } catch (err) {
+      console.error('Full error:', err);
+      setError(err.response?.data?.message || "Processing failed. Check backend logs.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleReset = () => {
     setResult(null);
@@ -263,10 +304,17 @@ const handleSubmit = async (e) => {
                   {result.violations.map((violation, idx) => (
                     <div
                       key={idx}
-                      className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                      className={`border rounded-lg p-4 hover:shadow-sm transition-shadow ${
+                        violation.reCheckResult === 'overturned'
+                          ? 'border-green-300 bg-green-50'
+                          : 'border-slate-200'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-4 mb-2">
-                        <h3 className="font-semibold text-slate-900">{violation.rule}</h3>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-slate-900">{violation.rule}</h3>
+                          <p className="text-sm text-slate-600 mt-1">{violation.reason}</p>
+                        </div>
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold border ${getSeverityBadgeColor(
                             violation.severity
@@ -275,7 +323,34 @@ const handleSubmit = async (e) => {
                           {violation.severity}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">{violation.reason}</p>
+
+                      {/* ✅ RECHECK RESULT */}
+                      {violation.reChecked && (
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm font-semibold text-blue-900">
+                              🔄 Rechecked: {violation.reCheckResult === 'confirmed' ? '✅ Confirmed' : '✅ Overturned'}
+                            </span>
+                            <span className="text-xs bg-blue-200 text-blue-900 px-2 py-1 rounded">
+                              {violation.reCheckConfidence}% confidence
+                            </span>
+                          </div>
+                          {violation.explanation && (
+                            <p className="text-xs text-blue-800">{violation.explanation}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ✅ RECHECK BUTTON */}
+                      {!violation.reChecked && (
+                        <button
+                          onClick={() => handleRecheck(idx)}
+                          disabled={rechecking === idx}
+                          className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          {rechecking === idx ? '🔄 Rechecking...' : '🔄 Request Recheck'}
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

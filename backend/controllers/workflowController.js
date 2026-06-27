@@ -1,5 +1,6 @@
 import { runWorkflow } from "../graph/index.js";
 import IntakeCase from '../models/IntakeCase.js';
+import { reCheckAgent } from '../agents/reCheckAgent.js';
 
 export const executeWorkflow = async (req, res) => {
   try {
@@ -40,6 +41,38 @@ export const getWorkflow = async (req, res) => {
   } catch (error) {
     console.log(`Error occurred`, error.message);
     res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+export const reCheckViolation = async (req, res) => {
+  try {
+    const { caseId, violationIndex } = req.params;
+    const userId = req.user?.id || 'anonymous_reviewer';
+
+    console.log('🔄 Recheck requested:', caseId, 'violation:', violationIndex);
+
+    // ✅ reCheckAgent uses STORED extracted text
+    const result = await reCheckAgent(caseId, violationIndex, userId);
+
+    const updatedCase = await IntakeCase.findOne({ caseId });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        caseId,
+        reCheckResult: result,
+        updatedViolation: updatedCase.violations[violationIndex],
+        status: updatedCase.status
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ RECHECK ERROR:', error.message);
+    return res.status(500).json({
       success: false,
       message: error.message
     });
