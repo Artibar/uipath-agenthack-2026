@@ -37,7 +37,8 @@ const intakeCaseSchema = new mongoose.Schema({
     "reporting",          
     "pending_recheck",    
     "rechecked",          
-    "recheck_failed" , "completed", "failed", "pending_recheck", "rechecked"], 
+    "recheck_failed" , "completed", "failed", "pending_recheck", "rechecked",  "retrieving",     
+    "retrieved",], 
     default: "pending",
   },
   extractedText: {
