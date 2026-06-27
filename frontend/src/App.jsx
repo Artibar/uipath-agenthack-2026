@@ -8,7 +8,7 @@ export default function ComplianceAnalyzer() {
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:3000/api';
+  const API_BASE_URL = 'https://uipath-agenthack-2026.onrender.com/api';
 
   const generateCaseId = () => `CASE-${Date.now()}`;
 
