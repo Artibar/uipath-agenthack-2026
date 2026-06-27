@@ -50,8 +50,9 @@ CRITICAL: Return ONLY valid JSON, nothing else. No text before or after.
   if (!jsonMatch) {
     console.error("❌ NO JSON FOUND IN:", raw);
     // Return empty violations instead of crashing
-    intakeCase.violations = [];
-    intakeCase.currentAgent = "report";
+    intakeCase.complianceViolations = [];  // ✅ CHANGED
+    intakeCase.status = "checked";  // ✅ ADDED
+    intakeCase.currentAgent = "risk";  // ✅ CHANGED (next agent)
     await intakeCase.save();
     return [];
   }
@@ -62,23 +63,27 @@ CRITICAL: Return ONLY valid JSON, nothing else. No text before or after.
   } catch (parseError) {
     console.error("❌ JSON PARSE ERROR:", parseError.message);
     console.error("Attempted to parse:", jsonMatch[0]);
-    intakeCase.violations = [];
-    intakeCase.currentAgent = "report";
+    intakeCase.complianceViolations = [];  // ✅ CHANGED
+    intakeCase.status = "checked";  // ✅ ADDED
+    intakeCase.currentAgent = "risk";  // ✅ CHANGED
     await intakeCase.save();
     return [];
   }
 
-  intakeCase.violations = parsed.violations || [];
-  intakeCase.currentAgent = "report";
+  // ✅ CHANGED: violations → complianceViolations
+  intakeCase.complianceViolations = parsed.violations || [];
+  intakeCase.status = "checked";  // ✅ ADDED
+  intakeCase.currentAgent = "risk";  // ✅ CHANGED
   intakeCase.processingHistory.push({
     agent: "compliance",
     action: "completed",
-    timestamp: new Date()
+    timestamp: new Date(),
+    metadata: { violationCount: intakeCase.complianceViolations.length }  // ✅ ADDED
   });
 
   await intakeCase.save();
 
-  console.log("✅ VIOLATIONS FOUND:", intakeCase.violations.length);
+  console.log("✅ VIOLATIONS FOUND:", intakeCase.complianceViolations.length);  
   
-  return intakeCase.violations;
+  return intakeCase.complianceViolations; 
 };

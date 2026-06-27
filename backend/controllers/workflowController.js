@@ -47,7 +47,6 @@ export const getWorkflow = async (req, res) => {
   }
 };
 
-
 export const reCheckViolation = async (req, res) => {
   try {
     const { caseId, violationIndex } = req.params;
@@ -55,7 +54,7 @@ export const reCheckViolation = async (req, res) => {
 
     console.log('🔄 Recheck requested:', caseId, 'violation:', violationIndex);
 
-    // ✅ reCheckAgent uses STORED extracted text
+    
     const result = await reCheckAgent(caseId, violationIndex, userId);
 
     const updatedCase = await IntakeCase.findOne({ caseId });
@@ -65,7 +64,7 @@ export const reCheckViolation = async (req, res) => {
       data: {
         caseId,
         reCheckResult: result,
-        updatedViolation: updatedCase.violations[violationIndex],
+        updatedViolation: updatedCase.complianceViolations[violationIndex],  // ✅ CHANGED
         status: updatedCase.status
       }
     });

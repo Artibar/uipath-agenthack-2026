@@ -8,7 +8,7 @@ export const retrievalAgent = async (caseId) => {
     throw new Error("Case not found");
   }
 
-  intakeCase.status = "processing";
+  intakeCase.status = "retrieving";  // ✅ CHANGED
 
   intakeCase.processingHistory.push({
     agent: "retrieval",
@@ -23,21 +23,22 @@ export const retrievalAgent = async (caseId) => {
   );
 
   intakeCase.retrievedRegulations =
-  regulations.map(rule => ({
-    title: rule.title,
-    content: rule.chunkText
-  }));
+    regulations.map(rule => ({
+      title: rule.title,
+      content: rule.chunkText
+    }));
 
+  intakeCase.status = "retrieved";  // ✅ ADDED
   intakeCase.currentAgent = "compliance";
 
   intakeCase.processingHistory.push({
     agent: "retrieval",
     action: "completed",
-    timestamp: new Date()
+    timestamp: new Date(),
+    metadata: { regulationsCount: regulations.length }  
   });
 
   await intakeCase.save();
 
   return intakeCase.retrievedRegulations;
-  
 };

@@ -1,5 +1,6 @@
 import IntakeCase from "../models/IntakeCase.js";
 import groq from "../services/groqService.js";
+import fs from "fs";
 
 export const reportAgent = async (caseId) => {
   const intakeCase = await IntakeCase.findOne({ caseId });
@@ -8,7 +9,8 @@ export const reportAgent = async (caseId) => {
     throw new Error("Case not found");
   }
 
-  const violationsSummary = intakeCase.violations
+  // ✅ CHANGED: violations → complianceViolations
+  const violationsSummary = intakeCase.complianceViolations
     ?.map(v => `- ${v.rule} (${v.severity}): ${v.reason}`)
     .join("\n") || "No violations found";
 
@@ -61,7 +63,15 @@ Generate a brief JSON report:
       recommendedActions: [],
       nextSteps: "Manual review required"
     };
-    intakeCase.status = "completed_with_errors";
+    intakeCase.status = "completed";  // ✅ CHANGED
+    intakeCase.riskLevel = "UNKNOWN";  // ✅ ADDED
+    
+    // ✅ DELETE FILE
+    if (intakeCase.source && fs.existsSync(intakeCase.source)) {
+      fs.unlinkSync(intakeCase.source);
+      console.log('🗑️ File deleted:', intakeCase.source);
+    }
+    
     await intakeCase.save();
     return intakeCase.report;
   }
@@ -77,19 +87,35 @@ Generate a brief JSON report:
       recommendedActions: [],
       nextSteps: "Manual review required"
     };
-    intakeCase.status = "completed_with_errors";
+    intakeCase.status = "completed";  // ✅ CHANGED
+    intakeCase.riskLevel = "UNKNOWN";  // ✅ ADDED
+    
+    // ✅ DELETE FILE
+    if (intakeCase.source && fs.existsSync(intakeCase.source)) {
+      fs.unlinkSync(intakeCase.source);
+      console.log('🗑️ File deleted:', intakeCase.source);
+    }
+    
     await intakeCase.save();
     return intakeCase.report;
   }
 
   intakeCase.report = parsed;
+  intakeCase.riskLevel = parsed.riskLevel;  // ✅ ADDED
   intakeCase.status = "completed";
   intakeCase.currentAgent = "complete";
   intakeCase.processingHistory.push({
     agent: "report",
     action: "completed",
-    timestamp: new Date()
+    timestamp: new Date(),
+    metadata: { riskLevel: parsed.riskLevel, violationCount: intakeCase.complianceViolations?.length || 0 }  // ✅ ADDED
   });
+
+  // ✅ DELETE FILE AFTER PROCESSING
+  if (intakeCase.source && fs.existsSync(intakeCase.source)) {
+    fs.unlinkSync(intakeCase.source);
+    console.log('🗑️ File deleted:', intakeCase.source);
+  }
 
   await intakeCase.save();
 
