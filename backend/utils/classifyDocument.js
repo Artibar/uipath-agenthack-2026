@@ -1,5 +1,4 @@
 export const classifyDocument = (mimetype, source) => {
-    // File format detection (keep as is)
     if (mimetype === "application/pdf") return "pdf";
     if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
     if (mimetype === "application/msword") return "doc";
@@ -8,44 +7,61 @@ export const classifyDocument = (mimetype, source) => {
     throw new Error("Unsupported document type");
 };
 
-// ✅ NEW: Separate function to classify document CATEGORY from extracted text
 export const classifyDocumentCategory = (extractedText) => {
     if (!extractedText) return "general";
     
     const text = extractedText.toLowerCase();
 
-    // Resume/CV detection — reject early
-    const cvKeywords = ["curriculum vitae", "resume", "work experience", 
-                        "education", "skills", "internship", "full stack", 
-                        "developer", "engineer", "gpa", "university", "college"];
-    const cvMatches = cvKeywords.filter(k => text.includes(k)).length;
-    if (cvMatches >= 3) return "resume";
+    // ✅ Debug — see what text is being classified
+    console.log("📄 TEXT PREVIEW:", text.substring(0, 500));
 
-    // Loan document detection
-    const loanKeywords = ["loan", "borrower", "lender", "interest rate", 
-                          "emi", "repayment", "collateral", "credit score",
-                          "principal", "disbursement", "mortgage", "rbi"];
+    // Resume/CV detection
+    const cvKeywords = [
+        "curriculum vitae", "resume", "work experience", "professional experience",
+        "education", "skills", "internship", "full stack", "developer", "engineer",
+        "gpa", "university", "college", "bachelor", "master", "b.tech", "m.tech",
+        "projects", "achievements", "certifications", "linkedin", "github",
+        "objective", "summary", "profile", "hobbies", "references"
+    ];
+    const cvMatches = cvKeywords.filter(k => text.includes(k));
+    console.log("🎯 CV MATCHES:", cvMatches);
+    console.log("🔢 CV COUNT:", cvMatches.length);
+
+    // ✅ Lower threshold from 3 to 2
+    if (cvMatches.length >= 2) return "resume";
+
+    // Loan detection
+    const loanKeywords = [
+        "loan", "borrower", "lender", "interest rate",
+        "emi", "repayment", "collateral", "credit score",
+        "principal", "disbursement", "mortgage", "rbi",
+        "cibil", "nbfc", "sanctioned amount", "loan agreement"
+    ];
     const loanMatches = loanKeywords.filter(k => text.includes(k)).length;
 
-    // Insurance document detection
-    const insuranceKeywords = ["insurance", "premium", "policy", "claim", 
-                                "coverage", "insured", "beneficiary", "irdai",
-                                "deductible", "underwriter", "sum assured"];
+    // Insurance detection
+    const insuranceKeywords = [
+        "insurance", "premium", "policy", "claim",
+        "coverage", "insured", "beneficiary", "irdai",
+        "deductible", "underwriter", "sum assured",
+        "policyholder", "nominee", "maturity", "endowment"
+    ];
     const insuranceMatches = insuranceKeywords.filter(k => text.includes(k)).length;
 
-    // Vendor document detection
-    const vendorKeywords = ["vendor", "supplier", "contract", "procurement",
-                            "certificate", "iso", "soc", "compliance", 
-                            "subcontractor", "purchase order", "invoice"];
+    // Vendor detection
+    const vendorKeywords = [
+        "vendor", "supplier", "contract", "procurement",
+        "certificate", "iso", "soc", "compliance",
+        "subcontractor", "purchase order", "invoice",
+        "onboarding", "coi", "indemnity", "service agreement"
+    ];
     const vendorMatches = vendorKeywords.filter(k => text.includes(k)).length;
 
-    console.log(`📊 Category scores — loan:${loanMatches} insurance:${insuranceMatches} vendor:${vendorMatches} cv:${cvMatches}`);
+    console.log(`📊 Category scores — loan:${loanMatches} insurance:${insuranceMatches} vendor:${vendorMatches} cv:${cvMatches.length}`);
 
-    // Pick highest match
     const scores = { loan: loanMatches, insurance: insuranceMatches, vendor: vendorMatches };
-    const category = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
-    
-    // If no strong match, default to general
+    const topCategory = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
     const topScore = Math.max(loanMatches, insuranceMatches, vendorMatches);
-    return topScore >= 2 ? category : "general";
+
+    return topScore >= 2 ? topCategory : "general";
 };
