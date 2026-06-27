@@ -5,7 +5,7 @@ import { Groq } from 'groq-sdk';
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
-
+// agents/reCheckAgent.js
 export const reCheckAgent = async(caseId, violationIndex, userId) => {
     let intakeCase;
     
@@ -13,8 +13,17 @@ export const reCheckAgent = async(caseId, violationIndex, userId) => {
         intakeCase = await IntakeCase.findOne({caseId});
         if(!intakeCase) throw new Error("Case not found");
         
+        // ✅ FIX: Check if violations exist
+        if(!intakeCase.complianceViolations || intakeCase.complianceViolations.length === 0) {
+            throw new Error("No violations found to recheck");
+        }
+        
+        // ✅ FIX: Check if violation index exists
+        if(violationIndex < 0 || violationIndex >= intakeCase.complianceViolations.length) {
+            throw new Error(`Violation index ${violationIndex} not found`);
+        }
+        
         const violation = intakeCase.complianceViolations[violationIndex];
-        if(!violation) throw new Error("Violation not found");
         
         console.log('🔄 ReCheckAgent started...');
         console.log('  Violation Rule:', violation.rule);
@@ -123,7 +132,7 @@ Respond ONLY in JSON format:
         console.error('❌ RECHECK ERROR:', error.message);
         
         if(intakeCase) {
-            intakeCase.status = 'recheck_failed';
+            intakeCase.status = 'rechecked';  // ✅ CHANGED from 'recheck_failed'
             intakeCase.processingHistory.push({
                 agent: 'recheck',
                 action: 'failed',

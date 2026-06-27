@@ -30,7 +30,14 @@ const intakeCaseSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "processing", "uploaded", "extracting", "extracted", "completed", "failed", "pending_recheck", "rechecked"],  // ✅ ADDED
+    enum: ["pending", "processing", "uploaded", "extracting", "extracted", "checking",          
+    "checked",            
+    "analyzing",          
+    "analyzed",           
+    "reporting",          
+    "pending_recheck",    
+    "rechecked",          
+    "recheck_failed" , "completed", "failed", "pending_recheck", "rechecked"], 
     default: "pending",
   },
   extractedText: {
