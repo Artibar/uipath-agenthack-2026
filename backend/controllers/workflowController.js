@@ -25,7 +25,7 @@ export const executeWorkflow = async (req, res) => {
         caseId,
         status: intakeCase.status,
         riskLevel: intakeCase.riskLevel,
-        violations: intakeCase.complianceViolations,  // ✅ Map to violations
+        violations: intakeCase.violations,  // ✅ Map to violations
         report: intakeCase.report,
         reCheckEndpoint: `/api/intake/${caseId}/recheck/:violationIndex`,
         processingHistory: intakeCase.processingHistory
@@ -83,7 +83,7 @@ export const reCheckViolation = async (req, res) => {
       data: {
         caseId,
         reCheckResult: result,
-        updatedViolation: updatedCase.complianceViolations[violationIndex],  // ✅ CHANGED
+        updatedViolation: updatedCase.violations[violationIndex], 
         status: updatedCase.status
       }
     });

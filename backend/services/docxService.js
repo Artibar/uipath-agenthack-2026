@@ -1,28 +1,32 @@
 import mammoth from "mammoth";
-import fs from "fs";
-import path from "path";
 
 export const extractDocxText = async (filePath) => {
   try {
-    const resolvedPath = path.resolve(filePath);
+    let buffer;
 
-    console.log("Incoming path:", filePath);
-    console.log("Resolved path:", resolvedPath);
-    console.log("Exists:", fs.existsSync(resolvedPath));
-
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error("File not found");
+    if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+      console.log("🌐 Downloading DOCX from URL:", filePath);
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    } else {
+      // Local dev fallback
+      const fs = await import("fs");
+      const path = await import("path");
+      const resolvedPath = path.resolve(filePath);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error("File not found");
+      }
+      buffer = fs.readFileSync(resolvedPath);
     }
 
-    const stats = fs.statSync(resolvedPath);
-    console.log("File size:", stats.size);
-
-    const result = await mammoth.extractRawText({
-      path: resolvedPath
-    });
+    const result = await mammoth.extractRawText({ buffer });
 
     return {
-      text: result.value
+      text: result.value,
     };
   } catch (error) {
     throw new Error(`DOCX Extraction Failed: ${error.message}`);
