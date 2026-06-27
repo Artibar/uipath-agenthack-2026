@@ -9,10 +9,10 @@ export const reportAgent = async (caseId) => {
     throw new Error("Case not found");
   }
 
-  // ✅ CHANGED: violations → complianceViolations
-  const violationsSummary = intakeCase.complianceViolations
-    ?.map(v => `- ${v.rule} (${v.severity}): ${v.reason}`)
-    .join("\n") || "No violations found";
+ 
+ const violationsSummary = intakeCase.violations
+  ?.map(v => `- ${v.rule} (${v.severity}): ${v.reason}`)
+  .join("\n") || "No violations found";
 
   const regulationsSummary = intakeCase.retrievedRegulations
     ?.map(r => `- ${r.title}`)
@@ -108,15 +108,10 @@ Generate a brief JSON report:
     agent: "report",
     action: "completed",
     timestamp: new Date(),
-    metadata: { riskLevel: parsed.riskLevel, violationCount: intakeCase.complianceViolations?.length || 0 }  // ✅ ADDED
+    metadata: { riskLevel: parsed.riskLevel, violationCount: intakeCase.violations?.length || 0 }
   });
 
-  // ✅ DELETE FILE AFTER PROCESSING
-  if (intakeCase.source && fs.existsSync(intakeCase.source)) {
-    fs.unlinkSync(intakeCase.source);
-    console.log('🗑️ File deleted:', intakeCase.source);
-  }
-
+  
   await intakeCase.save();
 
   console.log("✅ REPORT GENERATED - Risk Level:", parsed.riskLevel);

@@ -31,28 +31,20 @@ CRITICAL: Return ONLY valid JSON, nothing else. No text before or after.
 
   const completion = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
-    messages: [
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
+    messages: [{ role: "user", content: prompt }],
     temperature: 0
   });
 
   const raw = completion.choices[0].message.content;
-  
   console.log("🔍 RAW COMPLIANCE RESPONSE:", raw);
 
-  // Extract JSON from response (handles text before/after)
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  
+
   if (!jsonMatch) {
     console.error("❌ NO JSON FOUND IN:", raw);
-    // Return empty violations instead of crashing
-    intakeCase.complianceViolations = [];  // ✅ CHANGED
-    intakeCase.status = "checked";  // ✅ ADDED
-    intakeCase.currentAgent = "risk";  // ✅ CHANGED (next agent)
+    intakeCase.violations = [];           // ✅ fixed
+    intakeCase.status = "checked";
+    intakeCase.currentAgent = "risk";
     await intakeCase.save();
     return [];
   }
@@ -62,28 +54,26 @@ CRITICAL: Return ONLY valid JSON, nothing else. No text before or after.
     parsed = JSON.parse(jsonMatch[0]);
   } catch (parseError) {
     console.error("❌ JSON PARSE ERROR:", parseError.message);
-    console.error("Attempted to parse:", jsonMatch[0]);
-    intakeCase.complianceViolations = [];  // ✅ CHANGED
-    intakeCase.status = "checked";  // ✅ ADDED
-    intakeCase.currentAgent = "risk";  // ✅ CHANGED
+    intakeCase.violations = [];           // ✅ fixed
+    intakeCase.status = "checked";
+    intakeCase.currentAgent = "risk";
     await intakeCase.save();
     return [];
   }
 
-  // ✅ CHANGED: violations → complianceViolations
-  intakeCase.complianceViolations = parsed.violations || [];
-  intakeCase.status = "checked";  // ✅ ADDED
-  intakeCase.currentAgent = "risk";  // ✅ CHANGED
+  intakeCase.violations = parsed.violations || [];   // ✅ fixed
+  intakeCase.status = "checked";
+  intakeCase.currentAgent = "risk";
   intakeCase.processingHistory.push({
     agent: "compliance",
     action: "completed",
     timestamp: new Date(),
-    metadata: { violationCount: intakeCase.complianceViolations.length }  // ✅ ADDED
+    metadata: { violationCount: intakeCase.violations.length }  // ✅ fixed
   });
 
   await intakeCase.save();
 
-  console.log("✅ VIOLATIONS FOUND:", intakeCase.complianceViolations.length);  
-  
-  return intakeCase.complianceViolations; 
+  console.log("✅ VIOLATIONS FOUND:", intakeCase.violations.length);
+
+  return intakeCase.violations;          
 };
