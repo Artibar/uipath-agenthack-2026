@@ -6,11 +6,30 @@ export const executeWorkflow = async (req, res) => {
   try {
     const { caseId } = req.params;
 
-    const result = await runWorkflow(caseId);
+    // Run workflow
+    await runWorkflow(caseId);
+
+    // ✅ Get full case with all data
+    const intakeCase = await IntakeCase.findOne({ caseId });
+
+    if (!intakeCase) {
+      return res.status(404).json({
+        success: false,
+        message: "Case not found"
+      });
+    }
 
     res.json({
       success: true,
-      data: result
+      data: {
+        caseId,
+        status: intakeCase.status,
+        riskLevel: intakeCase.riskLevel,
+        violations: intakeCase.complianceViolations,  // ✅ Map to violations
+        report: intakeCase.report,
+        reCheckEndpoint: `/api/intake/${caseId}/recheck/:violationIndex`,
+        processingHistory: intakeCase.processingHistory
+      }
     });
 
   } catch (error) {
