@@ -3,6 +3,8 @@ import axios from 'axios';
 
 export default function ComplianceAnalyzer() {
   const [file, setFile] = useState(null);
+  const [url, setUrl] = useState('');
+  const [inputType, setInputType] = useState('file'); // 'file' or 'url'
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -29,12 +31,21 @@ export default function ComplianceAnalyzer() {
     const files = e.dataTransfer.files;
     if (files && files[0]) {
       setFile(files[0]);
+      setInputType('file');
     }
   };
 
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+      setInputType('file');
+    }
+  };
+
+  const handleUrlChange = (e) => {
+    setUrl(e.target.value);
+    if (e.target.value) {
+      setInputType('url');
     }
   };
 
@@ -58,66 +69,97 @@ export default function ComplianceAnalyzer() {
     return colors[severity] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!file) {
-    setError("Please select a file");
-    return;
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  setLoading(true);
-  setError(null);
-  setResult(null);
+    if (inputType === 'file' && !file) {
+      setError('Please select a file');
+      return;
+    }
 
-  try {
-    const formData = new FormData();
-    formData.append("document", file);
+    if (inputType === 'url' && !url) {
+      setError('Please enter a valid URL');
+      return;
+    }
 
-    // Step 1: Upload (intake)
-    const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" }
-    });
-    
-    const caseId = uploadRes.data.data.caseId;
-    console.log('✅ Case created:', caseId);
+    if (inputType === 'url') {
+      try {
+        new URL(url);
+      } catch {
+        setError('Please enter a valid URL');
+        return;
+      }
+    }
 
-    // Step 2: Extraction
-    await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
-    console.log('✅ Extraction done');
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
-    // Step 3: Retrieval
-    await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
-    console.log('✅ Retrieval done');
+    try {
+      const caseId = generateCaseId();
+      let uploadRes;
 
-    // Step 4: Compliance
-    const complianceRes = await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
-    console.log('✅ Compliance done');
+      // Step 1: Upload (different for file vs URL)
+      if (inputType === 'file') {
+        const formData = new FormData();
+        formData.append('document', file);
 
-    // Step 5: Get final case with report
-    const workflow = await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
-    console.log(`workflow created for caseId: ${caseId}`, workflow.data)
-    const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
-    const finalCase = finalRes.data.data;
+        uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        // For URL, send as JSON
+        uploadRes = await axios.post(`${API_BASE_URL}/intake`, {
+          caseId,
+          documentType: 'url',
+          source: url,
+          originalFileName: url,
+          mimeType: 'text/html'
+        });
+      }
 
-    setResult({
-      caseId,
-      violations: finalCase.violations || [],
-      report: finalCase.report || {}
-    });
+      const finalCaseId = uploadRes.data.data.caseId;
+      console.log('✅ Case created:', finalCaseId);
 
-    setFile(null);
-  } catch (err) {
-    console.error('Full error:', err);
-    setError(err.response?.data?.message || "Processing failed. Check backend logs.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Step 2: Extraction
+      await axios.post(`${API_BASE_URL}/extraction/${finalCaseId}`);
+      console.log('✅ Extraction done');
 
+      // Step 3: Retrieval
+      await axios.post(`${API_BASE_URL}/retrieval/${finalCaseId}`);
+      console.log('✅ Retrieval done');
+
+      // Step 4: Compliance
+      await axios.post(`${API_BASE_URL}/compliance/${finalCaseId}`);
+      console.log('✅ Compliance done');
+
+      // Step 5: Get final case with report
+      await axios.post(`${API_BASE_URL}/workflow/${finalCaseId}`);
+      const finalRes = await axios.get(`${API_BASE_URL}/workflow/${finalCaseId}`);
+      const finalCase = finalRes.data.data;
+
+      setResult({
+        caseId: finalCaseId,
+        violations: finalCase.violations || [],
+        report: finalCase.report || {},
+        source: inputType === 'file' ? file.name : url
+      });
+
+      setFile(null);
+      setUrl('');
+    } catch (err) {
+      console.error('Full error:', err);
+      setError(err.response?.data?.message || 'Processing failed. Check backend logs.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleReset = () => {
     setResult(null);
     setFile(null);
+    setUrl('');
+    setInputType('file');
     setError(null);
   };
 
@@ -144,38 +186,95 @@ const handleSubmit = async (e) => {
         {!result && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
             <form onSubmit={handleSubmit}>
-              {/* Drag & Drop Area */}
-              <div
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-                  dragActive
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-300 bg-slate-50 hover:border-slate-400'
-                }`}
-              >
-                <input
-                  type="file"
-                  onChange={handleFileSelect}
-                  accept=".pdf,.doc,.docx,.txt"
-                  className="hidden"
-                  id="file-input"
-                />
-                <label htmlFor="file-input" className="cursor-pointer block">
-                  <div className="text-4xl mb-4">📄</div>
-                  <p className="text-lg font-semibold text-slate-900 mb-2">
-                    {file ? file.name : 'Drop your document here'}
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {file ? 'Click to change' : 'or click to browse'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-4">
-                    Supported: PDF, DOC, DOCX, TXT
-                  </p>
-                </label>
+              {/* Input Type Tabs */}
+              <div className="flex gap-4 mb-8 border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputType('file');
+                    setUrl('');
+                  }}
+                  className={`pb-4 px-4 font-semibold border-b-2 transition-colors ${
+                    inputType === 'file'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📁 Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputType('url');
+                    setFile(null);
+                  }}
+                  className={`pb-4 px-4 font-semibold border-b-2 transition-colors ${
+                    inputType === 'url'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🔗 Enter URL
+                </button>
               </div>
+
+              {/* File Upload Tab */}
+              {inputType === 'file' && (
+                <div>
+                  <div
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+                      dragActive
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-300 bg-slate-50 hover:border-slate-400'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      onChange={handleFileSelect}
+                      accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.pdf,.doc,.docx,.txt"
+                      className="hidden"
+                      id="file-input"
+                    />
+                    <label htmlFor="file-input" className="cursor-pointer block">
+                      <div className="text-4xl mb-4">📄</div>
+                      <p className="text-lg font-semibold text-slate-900 mb-2">
+                        {file ? file.name : 'Drop your document here'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {file ? 'Click to change' : 'or click to browse'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-4">
+                        Supported: PDF, DOC, DOCX, TXT (Max 50MB)
+                      </p>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* URL Input Tab */}
+              {inputType === 'url' && (
+                <div>
+                  <label className="block mb-2">
+                    <span className="text-sm font-medium text-slate-700 mb-2 block">
+                      Website URL
+                    </span>
+                    <input
+                      type="url"
+                      value={url}
+                      onChange={handleUrlChange}
+                      placeholder="https://example.com/document"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Enter a complete URL starting with http:// or https://
+                  </p>
+                </div>
+              )}
 
               {/* Error Message */}
               {error && (
@@ -188,7 +287,11 @@ const handleSubmit = async (e) => {
               <div className="mt-8 flex gap-4">
                 <button
                   type="submit"
-                  disabled={!file || loading}
+                  disabled={
+                    (inputType === 'file' && !file) ||
+                    (inputType === 'url' && !url) ||
+                    loading
+                  }
                   className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
                 >
                   {loading ? '⏳ Analyzing...' : '🔍 Analyze Document'}
@@ -245,9 +348,9 @@ const handleSubmit = async (e) => {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-600 mb-2">Case ID</p>
-                  <p className="text-sm font-mono text-slate-900 break-all">
-                    {result.caseId}
+                  <p className="text-sm font-medium text-slate-600 mb-2">Source</p>
+                  <p className="text-sm text-slate-900 break-all font-mono">
+                    {result.source}
                   </p>
                 </div>
               </div>
