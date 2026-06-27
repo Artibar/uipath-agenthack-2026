@@ -1,11 +1,10 @@
-// agents/reCheckAgent.js
 import IntakeCase from '../models/IntakeCase.js';
 import { Groq } from 'groq-sdk';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
-// agents/reCheckAgent.js
+
 export const reCheckAgent = async(caseId, violationIndex, userId) => {
     let intakeCase;
     
@@ -13,17 +12,19 @@ export const reCheckAgent = async(caseId, violationIndex, userId) => {
         intakeCase = await IntakeCase.findOne({caseId});
         if(!intakeCase) throw new Error("Case not found");
         
-        // ✅ FIX: Check if violations exist
-        if(!intakeCase.complianceViolations || intakeCase.complianceViolations.length === 0) {
+        // ✅ Fix 1: complianceViolations → violations, Violations → violations
+        if(!intakeCase.violations || intakeCase.violations.length === 0) {
             throw new Error("No violations found to recheck");
         }
         
-        // ✅ FIX: Check if violation index exists
-        if(violationIndex < 0 || violationIndex >= intakeCase.complianceViolations.length) {
-            throw new Error(`Violation index ${violationIndex} not found`);
+        // ✅ Fix 2: Violations → violations
+        const idx = parseInt(violationIndex);
+        if(idx < 0 || idx >= intakeCase.violations.length) {
+            throw new Error(`Violation index ${idx} not found`);
         }
         
-        const violation = intakeCase.complianceViolations[violationIndex];
+        // ✅ Fix 3: complianceViolations → violations
+        const violation = intakeCase.violations[idx];
         
         console.log('🔄 ReCheckAgent started...');
         console.log('  Violation Rule:', violation.rule);
@@ -32,7 +33,6 @@ export const reCheckAgent = async(caseId, violationIndex, userId) => {
         intakeCase.status = 'pending_recheck';
         await intakeCase.save();
         
-        // 🔍 Deep re-analysis using Groq
         const reCheckPrompt = `
 You are a compliance expert. Re-analyze this specific clause/rule from the document.
 
@@ -58,23 +58,17 @@ Respond ONLY in JSON format:
   "status": "confirmed" | "overturned"
 }`;
 
-        const response = await groq.messages.create({
-            model: "mixtral-8x7b-32768",
+        // ✅ Fix 4: groq.messages.create → groq.chat.completions.create (Groq SDK syntax)
+        const response = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",  // ✅ Fix 5: mixtral deprecated, use llama
             max_tokens: 500,
-            messages: [
-                {
-                    role: "user",
-                    content: reCheckPrompt
-                }
-            ]
+            messages: [{ role: "user", content: reCheckPrompt }]
         });
 
         let reCheckResult;
         try {
-            const resultText = response.content[0].type === 'text' 
-                ? response.content[0].text 
-                : JSON.stringify(response.content[0]);
-            
+            // ✅ Fix 6: response.content → response.choices[0].message.content
+            const resultText = response.choices[0].message.content;
             const jsonMatch = resultText.match(/\{[\s\S]*\}/);
             reCheckResult = JSON.parse(jsonMatch ? jsonMatch[0] : resultText);
         } catch (e) {
@@ -88,9 +82,9 @@ Respond ONLY in JSON format:
 
         console.log('✅ ReCheck Result:', reCheckResult.status, `(${reCheckResult.confidence}% confidence)`);
         
-        // Update violation with recheck data
-        intakeCase.complianceViolations[violationIndex] = {
-            ...intakeCase.complianceViolations[violationIndex],
+        // ✅ Fix 7: complianceViolations → violations (3 places)
+        intakeCase.violations[idx] = {
+            ...intakeCase.violations[idx].toObject(),  // ✅ Fix 8: toObject() for mongoose subdoc spread
             reChecked: true,
             reCheckResult: reCheckResult.status,
             reCheckConfidence: reCheckResult.confidence,
@@ -99,10 +93,12 @@ Respond ONLY in JSON format:
             explanation: reCheckResult.explanation
         };
         
-        // Update status based on recheck
         if (reCheckResult.status === 'overturned') {
-            intakeCase.complianceViolations[violationIndex].severity = 'RESOLVED';
+            intakeCase.violations[idx].severity = 'RESOLVED';
         }
+
+        // ✅ Fix 9: mark array as modified so mongoose saves it
+        intakeCase.markModified('violations');
         
         intakeCase.status = 'rechecked';
         intakeCase.processingHistory.push({
@@ -121,7 +117,7 @@ Respond ONLY in JSON format:
         
         return {
             caseId,
-            violationIndex,
+            violationIndex: idx,
             originalViolation: violation.rule,
             reCheckResult: reCheckResult.status,
             confidence: reCheckResult.confidence,
@@ -130,9 +126,8 @@ Respond ONLY in JSON format:
         
     } catch (error) {
         console.error('❌ RECHECK ERROR:', error.message);
-        
         if(intakeCase) {
-            intakeCase.status = 'rechecked';  // ✅ CHANGED from 'recheck_failed'
+            intakeCase.status = 'recheck_failed';
             intakeCase.processingHistory.push({
                 agent: 'recheck',
                 action: 'failed',
