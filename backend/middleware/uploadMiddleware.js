@@ -6,7 +6,7 @@ const storage = multer.memoryStorage();
 const multerInstance = multer({
     storage,
     limits: {
-        fileSize: 100 * 1024 * 1024  // 100MB
+        fileSize: 50 * 1024 * 1024 // 50MB
     },
     fileFilter: (req, file, cb) => {
         console.log('🔧 MULTER FILTER - File:', file.originalname);
