@@ -117,7 +117,7 @@ export default function ComplianceAnalyzer() {
       const formData = new FormData();
       formData.append("document", file);
 
-      // Step 1: Intake
+      // Step 1: Intake — frontend handles file upload
       setLoadingStep('uploading');
       const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -125,26 +125,28 @@ export default function ComplianceAnalyzer() {
       const caseId = uploadRes.data.data.caseId;
       console.log('✅ Case created:', caseId);
 
-      // Step 2: Extraction
+      // Step 2: Trigger UiPath Maestro
       setLoadingStep('extracting');
-      await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
-      console.log('✅ Extraction done');
+      await axios.post(`${API_BASE_URL}/uipath/trigger/${caseId}`);
+      console.log('✅ UiPath Maestro triggered');
 
-      // Step 3: Retrieval
-      setLoadingStep('retrieving');
-      await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
-      console.log('✅ Retrieval done');
-
-      // Step 4: Compliance
-      setLoadingStep('compliance');
-      await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
-      console.log('✅ Compliance done');
-
-      // Step 5: Report
+      // Step 3: Poll until completed
       setLoadingStep('reporting');
-      await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
-      const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
-      const finalCase = finalRes.data.data;
+      let finalCase = null;
+      let attempts = 0;
+      while (attempts < 30) {
+        await new Promise(r => setTimeout(r, 4000));
+        const statusRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
+        const status = statusRes.data.data.status;
+        console.log(`⏳ Status: ${status} (attempt ${attempts + 1}/30)`);
+        if (status === 'completed') {
+          finalCase = statusRes.data.data;
+          break;
+        }
+        attempts++;
+      }
+
+      if (!finalCase) throw new Error('Timed out — please try again');
 
       setResult({
         caseId,
@@ -240,24 +242,29 @@ export default function ComplianceAnalyzer() {
                     🤖 UiPath Maestro Orchestrating Agents...
                   </p>
 
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uploading' ? 'text-blue-600 font-medium' : ['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uploading' ? 'bg-blue-600 animate-pulse' : ['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? '✅' : '📥'} Intake Agent — Uploading document</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uploading' ? 'text-blue-600 font-medium' : ['extracting','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uploading' ? 'bg-blue-600 animate-pulse' : ['extracting','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{['extracting','reporting'].includes(loadingStep) ? '✅' : '📥'} Intake Agent — Uploading document</span>
                   </div>
 
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'extracting' ? 'text-blue-600 font-medium' : ['retrieving','compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'extracting' ? 'bg-blue-600 animate-pulse' : ['retrieving','compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{['retrieving','compliance','reporting'].includes(loadingStep) ? '✅' : '📄'} Extraction Agent — Extracting content</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'extracting' ? 'text-purple-600 font-medium' : loadingStep === 'reporting' ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'extracting' ? 'bg-purple-600 animate-pulse' : loadingStep === 'reporting' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{loadingStep === 'reporting' ? '✅' : '🤖'} UiPath Maestro — Triggering orchestration</span>
                   </div>
 
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'retrieving' ? 'text-blue-600 font-medium' : ['compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'retrieving' ? 'bg-blue-600 animate-pulse' : ['compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{['compliance','reporting'].includes(loadingStep) ? '✅' : '📚'} Retrieval Agent — Fetching regulations</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'reporting' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'reporting' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>📄 Extraction Agent — Extracting content</span>
                   </div>
 
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'compliance' ? 'text-blue-600 font-medium' : loadingStep === 'reporting' ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'compliance' ? 'bg-blue-600 animate-pulse' : loadingStep === 'reporting' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{loadingStep === 'reporting' ? '✅' : '🔍'} Compliance Agent — Checking violations</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'reporting' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'reporting' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>📚 Retrieval Agent — Fetching regulations</span>
+                  </div>
+
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'reporting' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'reporting' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>🔍 Compliance Agent — Checking violations</span>
                   </div>
 
                   <div className={`flex items-center gap-3 text-sm ${loadingStep === 'reporting' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
