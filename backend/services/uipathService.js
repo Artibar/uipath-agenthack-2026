@@ -1,15 +1,15 @@
 export const triggerUiPathJob = async (caseId) => {
   // Get token
-  const tokenRes = await fetch('https://account.uipath.com/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'client_credentials',
-      client_id: process.env.UIPATH_CLIENT_ID,
-      client_secret: process.env.UIPATH_CLIENT_SECRET,
-      scope: 'OR.Jobs.Write OR.Execution.Write OR.Robots.Write'
-    })
-  });
+ const tokenRes = await fetch('https://staging.uipath.com/identity_/connect/token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: process.env.UIPATH_CLIENT_ID,
+    client_secret: process.env.UIPATH_CLIENT_SECRET,
+    scope: 'OR.Jobs.Write OR.Execution.Write OR.Robots.Write OR.Folders.Read'
+  })
+});
   const tokenData = await tokenRes.json();
   const access_token = tokenData.access_token;
   console.log('✅ UiPath token received');
