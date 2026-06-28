@@ -1,23 +1,21 @@
 export const triggerUiPathJob = async (caseId) => {
   // Get token
- const tokenRes = await fetch('https://staging.uipath.com/identity_/connect/token', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: process.env.UIPATH_CLIENT_ID,
-    client_secret: process.env.UIPATH_CLIENT_SECRET,
-    // ✅ Remove scope — let UiPath use default scopes from app registration
-  })
-});
+  const tokenRes = await fetch('https://staging.uipath.com/identity_/connect/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: process.env.UIPATH_CLIENT_ID,
+      client_secret: process.env.UIPATH_CLIENT_SECRET,
+    })
+  });
 
-const tokenData = await tokenRes.json();
-console.log('🔑 Full token response:', JSON.stringify(tokenData));
-const access_token = tokenData.access_token;
-console.log('✅ UiPath token received');
-  
+  const tokenData = await tokenRes.json();
+  console.log('🔑 Full token response:', JSON.stringify(tokenData));
+  const access_token = tokenData.access_token;
+  console.log('✅ UiPath token received');
 
-  // ✅ Try without filter first — get ALL releases
+  // Get all releases
   const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
   console.log('🌐 Releases URL:', url);
 
@@ -46,6 +44,7 @@ console.log('✅ UiPath token received');
 
   console.log('✅ Release key found:', releaseKey);
 
+  // Trigger job
   const jobRes = await fetch(
     `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs`,
     {
@@ -55,14 +54,15 @@ console.log('✅ UiPath token received');
         'Content-Type': 'application/json',
         'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
       },
-     body: JSON.stringify({
-  startInfo: {
-    ReleaseKey: releaseKey,
-    Strategy: 'ModernJobsCount',  
-    JobsCount: 1,                  
-    InputArguments: JSON.stringify({ caseId })
-  }
-})
+      body: JSON.stringify({
+        startInfo: {
+          ReleaseKey: releaseKey,
+          Strategy: 'JobsCount',
+          JobsCount: 1,
+          RuntimeType: 'Serverless',
+          InputArguments: JSON.stringify({ caseId })
+        }
+      })
     }
   );
 
@@ -71,7 +71,7 @@ console.log('✅ UiPath token received');
   console.log('📋 Job response:', jobText);
 
   if (!jobText) throw new Error('Empty response from Jobs API');
-  
+
   const job = JSON.parse(jobText);
   console.log('✅ UiPath job triggered:', job);
   return job;
