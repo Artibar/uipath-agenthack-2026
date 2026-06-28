@@ -45,26 +45,23 @@ export const triggerUiPathJob = async (caseId) => {
   console.log('✅ Release key found:', releaseKey);
 
   // Trigger job
-  const jobRes = await fetch(
-    `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        'Content-Type': 'application/json',
-        'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
-      },
-      body: JSON.stringify({
-        startInfo: {
-          ReleaseKey: releaseKey,
-          Strategy: 'JobsCount',
-          JobsCount: 1,
-          RuntimeType: 'Serverless',
-          InputArguments: JSON.stringify({ caseId })
-        }
-      })
-    }
-  );
+  // Replace the job trigger section with this:
+
+ const jobRes = await fetch(
+  `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/ProcessOrchestration/StartProcessOrchestration`,
+  {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${access_token}`,
+      'Content-Type': 'application/json',
+      'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
+    },
+    body: JSON.stringify({
+      releaseKey: releaseKey,
+      inputArguments: { caseId }  // ✅ no JSON.stringify needed here
+    })
+  }
+);
 
   const jobText = await jobRes.text();
   console.log('📋 Job response status:', jobRes.status);
