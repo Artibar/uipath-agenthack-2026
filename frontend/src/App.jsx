@@ -4,14 +4,13 @@ import axios from 'axios';
 export default function ComplianceAnalyzer() {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
-  const [rechecking, setRechecking] = useState(null);  // ✅ Track which violation is being rechecked
+  const [rechecking, setRechecking] = useState(null);
 
   const API_BASE_URL = 'https://uipath-agenthack-2026.onrender.com/api';
-
-  const generateCaseId = () => `CASE-${Date.now()}`;
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -28,15 +27,11 @@ export default function ComplianceAnalyzer() {
     e.stopPropagation();
     setDragActive(false);
     const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      setFile(files[0]);
-    }
+    if (files && files[0]) setFile(files[0]);
   };
 
   const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
+    if (e.target.files && e.target.files[0]) setFile(e.target.files[0]);
   };
 
   const getRiskColor = (risk) => {
@@ -60,18 +55,14 @@ export default function ComplianceAnalyzer() {
     return colors[severity] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-  // ✅ NEW: Handle recheck
   const handleRecheck = async (violationIndex) => {
     try {
       setRechecking(violationIndex);
-      
       const response = await axios.post(
         `${API_BASE_URL}/workflow/${result.caseId}/recheck/${violationIndex}`
       );
-
       console.log('✅ Recheck result:', response.data);
 
-      // Update violations with recheck result
       const updatedViolations = result.violations.map((v, idx) => {
         if (idx === violationIndex) {
           return {
@@ -85,12 +76,7 @@ export default function ComplianceAnalyzer() {
         return v;
       });
 
-      setResult({
-        ...result,
-        violations: updatedViolations
-      });
-
-      // Show success toast (optional)
+      setResult(prev => ({ ...prev, violations: updatedViolations }));
       alert(`✅ Violation rechecked: ${response.data.data.reCheckResult.status}`);
     } catch (err) {
       console.error('Recheck error:', err);
@@ -116,30 +102,36 @@ export default function ComplianceAnalyzer() {
       formData.append("document", file);
 
       // Step 1: Upload (intake)
+      setLoadingStep('uploading');
       const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      
       const caseId = uploadRes.data.data.caseId;
       console.log('✅ Case created:', caseId);
 
-      // Step 2: Extraction
-      await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
-      console.log('✅ Extraction done');
+      // Step 2: Trigger UiPath orchestration
+      setLoadingStep('uipath');
+      await axios.post(`${API_BASE_URL}/uipath/trigger/${caseId}`);
+      console.log('✅ UiPath triggered');
 
-      // Step 3: Retrieval
-      await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
-      console.log('✅ Retrieval done');
+      // Step 3: Poll until completed
+      setLoadingStep('polling');
+      let finalCase = null;
+      let attempts = 0;
+      while (attempts < 20) {
+        await new Promise(r => setTimeout(r, 4000));
+        const statusRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
+        const status = statusRes.data.data.status;
+        console.log(`⏳ Polling status: ${status} (attempt ${attempts + 1})`);
 
-      // Step 4: Compliance
-      const complianceRes = await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
-      console.log('✅ Compliance done');
+        if (status === 'completed') {
+          finalCase = statusRes.data.data;
+          break;
+        }
+        attempts++;
+      }
 
-      // Step 5: Get final case with report
-      const workflow = await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
-      console.log(`workflow created for caseId: ${caseId}`, workflow.data)
-      const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
-      const finalCase = finalRes.data.data;
+      if (!finalCase) throw new Error('Processing timed out — please try again');
 
       setResult({
         caseId,
@@ -153,6 +145,7 @@ export default function ComplianceAnalyzer() {
       setError(err.response?.data?.message || "Processing failed. Check backend logs.");
     } finally {
       setLoading(false);
+      setLoadingStep('');
     }
   };
 
@@ -165,7 +158,7 @@ export default function ComplianceAnalyzer() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 shadow-sm">
+      <header className="bg-white border-b border-slate-200 sticky top-0 shadow-sm z-10">
         <div className="max-w-5xl mx-auto px-6 py-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -173,19 +166,18 @@ export default function ComplianceAnalyzer() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Compliance Analyzer</h1>
-              <p className="text-sm text-slate-600">AI-powered document compliance assessment</p>
+              <p className="text-sm text-slate-600">AI-powered document compliance assessment • Orchestrated by UiPath Maestro</p>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-5xl mx-auto px-6 py-12">
         {/* Upload Section */}
         {!result && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
             <form onSubmit={handleSubmit}>
-              {/* Drag & Drop Area */}
+              {/* Drag & Drop */}
               <div
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -213,12 +205,12 @@ export default function ComplianceAnalyzer() {
                     {file ? 'Click to change' : 'or click to browse'}
                   </p>
                   <p className="text-xs text-slate-500 mt-4">
-                    Supported: PDF, DOC, DOCX, TXT
+                    Supported: PDF, DOC, DOCX • Vendor, Insurance, Loan documents
                   </p>
                 </label>
               </div>
 
-              {/* Error Message */}
+              {/* Error */}
               {error && (
                 <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-800">⚠️ {error}</p>
@@ -226,30 +218,57 @@ export default function ComplianceAnalyzer() {
               )}
 
               {/* Submit Button */}
-              <div className="mt-8 flex gap-4">
+              <div className="mt-8">
                 <button
                   type="submit"
                   disabled={!file || loading}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
                 >
                   {loading ? '⏳ Analyzing...' : '🔍 Analyze Document'}
                 </button>
               </div>
 
-              {/* Loading Progress */}
+              {/* Loading Steps */}
               {loading && (
-                <div className="mt-6 space-y-2">
-                  <div className="flex items-center gap-3 text-sm text-slate-600">
-                    <div className="w-4 h-4 bg-blue-600 rounded-full animate-pulse"></div>
-                    <span>Extracting content...</span>
+                <div className="mt-6 bg-slate-50 rounded-xl p-6 space-y-3">
+                  <p className="text-sm font-semibold text-slate-700 mb-4">
+                    🤖 UiPath Maestro Orchestrating Agents...
+                  </p>
+
+                  {/* Step 1 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uploading' ? 'text-blue-600 font-medium' : loadingStep === 'uipath' || loadingStep === 'polling' ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uploading' ? 'bg-blue-600 animate-pulse' : loadingStep === 'uipath' || loadingStep === 'polling' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{loadingStep === 'uipath' || loadingStep === 'polling' ? '✅' : '📤'} Intake Agent — Uploading document</span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-slate-500">
-                    <div className="w-4 h-4 border-2 border-slate-300 rounded-full"></div>
-                    <span>Retrieving regulations...</span>
+
+                  {/* Step 2 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uipath' ? 'text-purple-600 font-medium' : loadingStep === 'polling' ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uipath' ? 'bg-purple-600 animate-pulse' : loadingStep === 'polling' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{loadingStep === 'polling' ? '✅' : '🤖'} UiPath Maestro — Triggering orchestration</span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-slate-500">
-                    <div className="w-4 h-4 border-2 border-slate-300 rounded-full"></div>
-                    <span>Analyzing compliance...</span>
+
+                  {/* Step 3 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>📄 Extraction Agent — Extracting content</span>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>📚 Retrieval Agent — Fetching regulations</span>
+                  </div>
+
+                  {/* Step 5 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>✅ Compliance Agent — Checking violations</span>
+                  </div>
+
+                  {/* Step 6 */}
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                    <span>📋 Report Agent — Generating report</span>
                   </div>
                 </div>
               )}
@@ -260,46 +279,38 @@ export default function ComplianceAnalyzer() {
         {/* Results Section */}
         {result && (
           <div className="space-y-6">
-            {/* Risk Summary Card */}
+            {/* UiPath Badge */}
+            <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 w-fit">
+              <span className="text-purple-700 text-sm font-medium">🤖 Orchestrated by UiPath Maestro BPMN</span>
+            </div>
+
+            {/* Risk Summary */}
             <div
               className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8"
-              style={{
-                borderLeft: `6px solid ${getRiskColor(result.report.riskLevel || 'MEDIUM')}`
-              }}
+              style={{ borderLeft: `6px solid ${getRiskColor(result.report.riskLevel || 'MEDIUM')}` }}
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-2">Overall Risk Level</p>
-                  <div className="flex items-baseline gap-3">
-                    <span
-                      className="text-4xl font-bold"
-                      style={{ color: getRiskColor(result.report.riskLevel) }}
-                    >
-                      {result.report.riskLevel || 'UNKNOWN'}
-                    </span>
-                  </div>
+                  <span className="text-4xl font-bold" style={{ color: getRiskColor(result.report.riskLevel) }}>
+                    {result.report.riskLevel || 'UNKNOWN'}
+                  </span>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-2">Violations Found</p>
-                  <p className="text-4xl font-bold text-slate-900">
-                    {result.violations?.length || 0}
-                  </p>
+                  <p className="text-4xl font-bold text-slate-900">{result.violations?.length || 0}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-2">Case ID</p>
-                  <p className="text-sm font-mono text-slate-900 break-all">
-                    {result.caseId}
-                  </p>
+                  <p className="text-sm font-mono text-slate-900 break-all">{result.caseId}</p>
                 </div>
               </div>
             </div>
 
-            {/* Violations List */}
+            {/* Violations */}
             {result.violations && result.violations.length > 0 && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-                <h2 className="text-xl font-bold text-slate-900 mb-6">
-                  🚨 Detected Violations
-                </h2>
+                <h2 className="text-xl font-bold text-slate-900 mb-6">🚨 Detected Violations</h2>
                 <div className="space-y-4">
                   {result.violations.map((violation, idx) => (
                     <div
@@ -315,16 +326,11 @@ export default function ComplianceAnalyzer() {
                           <h3 className="font-semibold text-slate-900">{violation.rule}</h3>
                           <p className="text-sm text-slate-600 mt-1">{violation.reason}</p>
                         </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${getSeverityBadgeColor(
-                            violation.severity
-                          )}`}
-                        >
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getSeverityBadgeColor(violation.severity)}`}>
                           {violation.severity}
                         </span>
                       </div>
 
-                      {/* ✅ RECHECK RESULT */}
                       {violation.reChecked && (
                         <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                           <div className="flex items-center gap-2 mb-2">
@@ -341,7 +347,6 @@ export default function ComplianceAnalyzer() {
                         </div>
                       )}
 
-                      {/* ✅ RECHECK BUTTON */}
                       {!violation.reChecked && (
                         <button
                           onClick={() => handleRecheck(idx)}
@@ -357,7 +362,7 @@ export default function ComplianceAnalyzer() {
               </div>
             )}
 
-            {/* Report Section */}
+            {/* Report */}
             {result.report && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">📋 Compliance Report</h2>
@@ -366,18 +371,12 @@ export default function ComplianceAnalyzer() {
                     <h3 className="font-semibold text-slate-900 mb-2">Summary</h3>
                     <p className="text-slate-700">{result.report.summary}</p>
                   </div>
-
                   {result.report.recommendedActions && (
                     <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">
-                        ✅ Recommended Actions
-                      </h3>
+                      <h3 className="font-semibold text-slate-900 mb-3">✅ Recommended Actions</h3>
                       <ul className="space-y-2">
                         {result.report.recommendedActions.map((action, idx) => (
-                          <li
-                            key={idx}
-                            className="flex items-start gap-3 text-slate-700"
-                          >
+                          <li key={idx} className="flex items-start gap-3 text-slate-700">
                             <span className="text-blue-600 font-bold mt-0.5">→</span>
                             <span>{action}</span>
                           </li>
@@ -385,7 +384,6 @@ export default function ComplianceAnalyzer() {
                       </ul>
                     </div>
                   )}
-
                   {result.report.nextSteps && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <h3 className="font-semibold text-blue-900 mb-2">Next Steps</h3>

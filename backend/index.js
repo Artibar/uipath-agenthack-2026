@@ -12,11 +12,14 @@ import extractionRoutes from './routes/extractionRoutes.js';
 import workflowRoutes from "./routes/workflowRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import intakeRoutes from './routes/intakeRoutes.js';
+import uipathRoutes from './routes/uipathRoutes.js';
 
 // Database & Scripts
 import connectDB from './config/db.js';
 import { indexRegulations } from "./scripts/indexRegulations.js";
 import { seedRegulations } from './seed.js';
+
+
 
 // Get __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -91,7 +94,7 @@ async function startServer() {
         app.use('/api/extraction', extractionRoutes);
         app.use('/api/workflow', workflowRoutes);
         app.use('/api', testRoutes);
-
+        app.use('/api/uipath', uipathRoutes);
         // ============================================
         // ERROR HANDLING MIDDLEWARE
         // ============================================
