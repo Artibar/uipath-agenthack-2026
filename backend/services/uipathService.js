@@ -7,13 +7,15 @@ export const triggerUiPathJob = async (caseId) => {
     grant_type: 'client_credentials',
     client_id: process.env.UIPATH_CLIENT_ID,
     client_secret: process.env.UIPATH_CLIENT_SECRET,
-    scope: 'OR.Jobs.Write OR.Execution.Write OR.Robots.Write OR.Folders.Read'
+    // ✅ Remove scope — let UiPath use default scopes from app registration
   })
 });
-  const tokenData = await tokenRes.json();
+
+const tokenData = await tokenRes.json();
 console.log('🔑 Full token response:', JSON.stringify(tokenData));
 const access_token = tokenData.access_token;
 console.log('✅ UiPath token received');
+  
 
   // ✅ Try without filter first — get ALL releases
   const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
