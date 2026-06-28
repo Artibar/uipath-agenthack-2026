@@ -10,10 +10,35 @@ export const triggerUiPathJob = async (caseId) => {
       scope: 'OR.Jobs.Write OR.Execution.Write OR.Robots.Write'
     })
   });
-  const { access_token } = await tokenRes.json();
+  const tokenData = await tokenRes.json();
+  const access_token = tokenData.access_token;
   console.log('✅ UiPath token received');
 
-  // ✅ Maestro BPMN uses process name directly — no release key needed
+  // ✅ First get the release key dynamically
+  const releasesRes = await fetch(
+    `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases?$filter=Name eq 'Maestro BPMN'`,
+    {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        'Content-Type': 'application/json',
+        'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
+      }
+    }
+  );
+
+  const releasesText = await releasesRes.text();
+  console.log('📦 Releases response:', releasesText);
+
+  const releasesData = JSON.parse(releasesText);
+  const releaseKey = releasesData?.value?.[0]?.Key;
+
+  if (!releaseKey) {
+    throw new Error('Maestro BPMN process not found in Orchestrator');
+  }
+
+  console.log('✅ Release key found:', releaseKey);
+
+  // Trigger job with release key
   const jobRes = await fetch(
     `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs`,
     {
@@ -25,7 +50,7 @@ export const triggerUiPathJob = async (caseId) => {
       },
       body: JSON.stringify({
         startInfo: {
-          ProcessKey: 'Maestro BPMN',   // ✅ process name instead of release key
+          ReleaseKey: releaseKey,
           Strategy: 'All',
           RobotIds: [],
           InputArguments: JSON.stringify({ caseId })
@@ -34,7 +59,10 @@ export const triggerUiPathJob = async (caseId) => {
     }
   );
 
-  const job = await jobRes.json();
+  const jobText = await jobRes.text();
+  console.log('📋 Job response:', jobText);
+
+  const job = JSON.parse(jobText);
   console.log('✅ UiPath job triggered:', job);
   return job;
 };
