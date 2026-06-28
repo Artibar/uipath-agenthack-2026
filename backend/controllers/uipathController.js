@@ -1,12 +1,13 @@
-import { triggerUiPathJob } from '../services/uipathService.js';
+import { runWorkflow } from '../graph/index.js';
 
 export const triggerUiPath = async (req, res) => {
   try {
     const { caseId } = req.params;
-    const job = await triggerUiPathJob(caseId);
-    res.json({ success: true, data: job });
+    console.log('🚀 Running workflow for:', caseId);
+    await runWorkflow(caseId);
+    res.json({ success: true, caseId });
   } catch (error) {
-    console.error('❌ UiPath error:', error.message);
+    console.error('❌ Workflow error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };

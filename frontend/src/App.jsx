@@ -12,23 +12,19 @@ export default function ComplianceAnalyzer() {
 
   const API_BASE_URL = 'https://uipath-agenthack-2026.onrender.com/api';
 
-  // Valid file types for compliance documents
   const VALID_FILE_TYPES = [
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'text/plain'
   ];
-  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
+    else if (e.type === 'dragleave') setDragActive(false);
   };
 
   const handleDrop = (e) => {
@@ -36,44 +32,31 @@ export default function ComplianceAnalyzer() {
     e.stopPropagation();
     setDragActive(false);
     const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      validateAndSetFile(files[0]);
-    }
+    if (files && files[0]) validateAndSetFile(files[0]);
   };
 
   const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      validateAndSetFile(e.target.files[0]);
-    }
+    if (e.target.files && e.target.files[0]) validateAndSetFile(e.target.files[0]);
   };
 
   const validateAndSetFile = (selectedFile) => {
-    // Check file type
     if (!VALID_FILE_TYPES.includes(selectedFile.type)) {
       setError('Invalid file type. Please upload PDF, DOC, DOCX, or TXT');
       setFile(null);
       return;
     }
-
-    // Check file size
     if (selectedFile.size > MAX_FILE_SIZE) {
       const fileSizeMB = (selectedFile.size / 1024 / 1024).toFixed(1);
       setError(`File too large. Max size: 25MB. Your file: ${fileSizeMB}MB`);
       setFile(null);
       return;
     }
-
     setFile(selectedFile);
-    setError(null); // Clear previous errors when file changes
+    setError(null);
   };
 
   const getRiskColor = (risk) => {
-    const colors = {
-      CRITICAL: '#DC2626',
-      HIGH: '#EA580C',
-      MEDIUM: '#F59E0B',
-      LOW: '#10B981'
-    };
+    const colors = { CRITICAL: '#DC2626', HIGH: '#EA580C', MEDIUM: '#F59E0B', LOW: '#10B981' };
     return colors[risk] || '#6B7280';
   };
 
@@ -101,7 +84,6 @@ export default function ComplianceAnalyzer() {
           return {
             ...v,
             reChecked: true,
-            // ✅ Add safety checks with optional chaining for missing data
             reCheckResult: response.data?.data?.reCheckResult?.reCheckResult || 'unknown',
             reCheckConfidence: response.data?.data?.reCheckResult?.confidence || 0,
             explanation: response.data?.data?.reCheckResult?.explanation || 'No explanation provided'
@@ -123,25 +105,9 @@ export default function ComplianceAnalyzer() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Validation checks
-    if (!file) {
-      setError("Please select a file");
-      return;
-    }
-
-    // File type validation (double-check, though already validated on selection)
-    if (!VALID_FILE_TYPES.includes(file.type)) {
-      setError('Invalid file type. Please upload PDF, DOC, DOCX, or TXT');
-      return;
-    }
-
-    // File size validation (double-check, though already validated on selection)
-    if (file.size > MAX_FILE_SIZE) {
-      const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
-      setError(`File too large. Max 25MB. Your file: ${fileSizeMB}MB`);
-      return;
-    }
+    if (!file) { setError("Please select a file"); return; }
+    if (!VALID_FILE_TYPES.includes(file.type)) { setError('Invalid file type'); return; }
+    if (file.size > MAX_FILE_SIZE) { setError('File too large. Max 25MB'); return; }
 
     setLoading(true);
     setError(null);
@@ -151,7 +117,7 @@ export default function ComplianceAnalyzer() {
       const formData = new FormData();
       formData.append("document", file);
 
-      // Step 1: Upload (intake)
+      // Step 1: Intake
       setLoadingStep('uploading');
       const uploadRes = await axios.post(`${API_BASE_URL}/intake/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -159,33 +125,26 @@ export default function ComplianceAnalyzer() {
       const caseId = uploadRes.data.data.caseId;
       console.log('✅ Case created:', caseId);
 
-      // Step 2: Trigger UiPath orchestration
-      setLoadingStep('uipath');
-      await axios.post(`${API_BASE_URL}/uipath/trigger/${caseId}`);
-      console.log('✅ UiPath triggered');
+      // Step 2: Extraction
+      setLoadingStep('extracting');
+      await axios.post(`${API_BASE_URL}/extraction/${caseId}`);
+      console.log('✅ Extraction done');
 
-      // Step 3: Poll until completed (increased timeout: 30 attempts × 4s = 120s max)
-      setLoadingStep('polling');
-      let finalCase = null;
-      let attempts = 0;
-      const maxAttempts = 30;
+      // Step 3: Retrieval
+      setLoadingStep('retrieving');
+      await axios.post(`${API_BASE_URL}/retrieval/${caseId}`);
+      console.log('✅ Retrieval done');
 
-      while (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 4000));
-        const statusRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
-        const status = statusRes.data.data.status;
-        console.log(`⏳ Polling status: ${status} (attempt ${attempts + 1}/${maxAttempts})`);
+      // Step 4: Compliance
+      setLoadingStep('compliance');
+      await axios.post(`${API_BASE_URL}/compliance/${caseId}`);
+      console.log('✅ Compliance done');
 
-        if (status === 'completed') {
-          finalCase = statusRes.data.data;
-          break;
-        }
-        attempts++;
-      }
-
-      if (!finalCase) {
-        throw new Error(`Processing timed out after ${maxAttempts * 4}s. Try a smaller document or check backend logs.`);
-      }
+      // Step 5: Report
+      setLoadingStep('reporting');
+      await axios.post(`${API_BASE_URL}/workflow/${caseId}`);
+      const finalRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
+      const finalCase = finalRes.data.data;
 
       setResult({
         caseId,
@@ -196,7 +155,7 @@ export default function ComplianceAnalyzer() {
       setFile(null);
     } catch (err) {
       console.error('Full error:', err);
-      setError(err.response?.data?.message || err.message || "Processing failed. Check backend logs.");
+      setError(err.response?.data?.message || err.message || "Processing failed.");
     } finally {
       setLoading(false);
       setLoadingStep('');
@@ -211,7 +170,6 @@ export default function ComplianceAnalyzer() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 shadow-sm z-10">
         <div className="max-w-5xl mx-auto px-6 py-6">
           <div className="flex items-center gap-3">
@@ -227,20 +185,16 @@ export default function ComplianceAnalyzer() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-12">
-        {/* Upload Section */}
         {!result && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
             <form onSubmit={handleSubmit}>
-              {/* Drag & Drop */}
               <div
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-                  dragActive
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-300 bg-slate-50 hover:border-slate-400'
+                  dragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50 hover:border-slate-400'
                 }`}
               >
                 <input
@@ -259,19 +213,17 @@ export default function ComplianceAnalyzer() {
                     {file ? 'Click to change' : 'or click to browse'}
                   </p>
                   <p className="text-xs text-slate-500 mt-4">
-                    Supported: PDF, DOC, DOCX, TXT • Max size: 25MB • Vendor, Insurance, Loan documents
+                    Supported: PDF, DOC, DOCX, TXT • Max 25MB • Vendor, Insurance, Loan documents
                   </p>
                 </label>
               </div>
 
-              {/* Error */}
               {error && (
                 <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-800">⚠️ {error}</p>
                 </div>
               )}
 
-              {/* Submit Button */}
               <div className="mt-8">
                 <button
                   type="submit"
@@ -282,46 +234,34 @@ export default function ComplianceAnalyzer() {
                 </button>
               </div>
 
-              {/* Loading Steps */}
               {loading && (
                 <div className="mt-6 bg-slate-50 rounded-xl p-6 space-y-3">
                   <p className="text-sm font-semibold text-slate-700 mb-4">
                     🤖 UiPath Maestro Orchestrating Agents...
                   </p>
 
-                  {/* Step 1 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uploading' ? 'text-blue-600 font-medium' : loadingStep === 'uipath' || loadingStep === 'polling' ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uploading' ? 'bg-blue-600 animate-pulse' : loadingStep === 'uipath' || loadingStep === 'polling' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{loadingStep === 'uipath' || loadingStep === 'polling' ? '✅' : '📤'} Intake Agent — Uploading document</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uploading' ? 'text-blue-600 font-medium' : ['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uploading' ? 'bg-blue-600 animate-pulse' : ['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{['extracting','retrieving','compliance','reporting'].includes(loadingStep) ? '✅' : '📥'} Intake Agent — Uploading document</span>
                   </div>
 
-                  {/* Step 2 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'uipath' ? 'text-purple-600 font-medium' : loadingStep === 'polling' ? 'text-green-600' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'uipath' ? 'bg-purple-600 animate-pulse' : loadingStep === 'polling' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
-                    <span>{loadingStep === 'polling' ? '✅' : '🤖'} UiPath Maestro — Triggering orchestration</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'extracting' ? 'text-blue-600 font-medium' : ['retrieving','compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'extracting' ? 'bg-blue-600 animate-pulse' : ['retrieving','compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{['retrieving','compliance','reporting'].includes(loadingStep) ? '✅' : '📄'} Extraction Agent — Extracting content</span>
                   </div>
 
-                  {/* Step 3 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
-                    <span>📄 Extraction Agent — Extracting content</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'retrieving' ? 'text-blue-600 font-medium' : ['compliance','reporting'].includes(loadingStep) ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'retrieving' ? 'bg-blue-600 animate-pulse' : ['compliance','reporting'].includes(loadingStep) ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{['compliance','reporting'].includes(loadingStep) ? '✅' : '📚'} Retrieval Agent — Fetching regulations</span>
                   </div>
 
-                  {/* Step 4 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
-                    <span>📚 Retrieval Agent — Fetching regulations</span>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'compliance' ? 'text-blue-600 font-medium' : loadingStep === 'reporting' ? 'text-green-600' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'compliance' ? 'bg-blue-600 animate-pulse' : loadingStep === 'reporting' ? 'bg-green-500' : 'border-2 border-slate-300'}`}></div>
+                    <span>{loadingStep === 'reporting' ? '✅' : '🔍'} Compliance Agent — Checking violations</span>
                   </div>
 
-                  {/* Step 5 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
-                    <span>✅ Compliance Agent — Checking violations</span>
-                  </div>
-
-                  {/* Step 6 */}
-                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'polling' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'polling' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
+                  <div className={`flex items-center gap-3 text-sm ${loadingStep === 'reporting' ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                    <div className={`w-4 h-4 rounded-full flex-shrink-0 ${loadingStep === 'reporting' ? 'bg-blue-600 animate-pulse' : 'border-2 border-slate-300'}`}></div>
                     <span>📋 Report Agent — Generating report</span>
                   </div>
                 </div>
@@ -330,15 +270,12 @@ export default function ComplianceAnalyzer() {
           </div>
         )}
 
-        {/* Results Section */}
         {result && (
           <div className="space-y-6">
-            {/* UiPath Badge */}
             <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 w-fit">
               <span className="text-purple-700 text-sm font-medium">🤖 Orchestrated by UiPath Maestro BPMN</span>
             </div>
 
-            {/* Risk Summary */}
             <div
               className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8"
               style={{ borderLeft: `6px solid ${getRiskColor(result.report.riskLevel || 'MEDIUM')}` }}
@@ -361,7 +298,6 @@ export default function ComplianceAnalyzer() {
               </div>
             </div>
 
-            {/* Violations */}
             {result.violations && result.violations.length > 0 && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">🚨 Detected Violations</h2>
@@ -370,9 +306,7 @@ export default function ComplianceAnalyzer() {
                     <div
                       key={idx}
                       className={`border rounded-lg p-4 hover:shadow-sm transition-shadow ${
-                        violation.reCheckResult === 'overturned'
-                          ? 'border-green-300 bg-green-50'
-                          : 'border-slate-200'
+                        violation.reCheckResult === 'overturned' ? 'border-green-300 bg-green-50' : 'border-slate-200'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-4 mb-2">
@@ -416,7 +350,6 @@ export default function ComplianceAnalyzer() {
               </div>
             )}
 
-            {/* Report */}
             {result.report && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">📋 Compliance Report</h2>
@@ -448,7 +381,6 @@ export default function ComplianceAnalyzer() {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex gap-4">
               <button
                 onClick={handleReset}
@@ -474,7 +406,6 @@ export default function ComplianceAnalyzer() {
           </div>
         )}
 
-        {/* Footer */}
         <div className="mt-12 text-center text-sm text-slate-600">
           <p>Powered by AI-driven compliance analysis • UiPath AgentHack 2026</p>
         </div>
