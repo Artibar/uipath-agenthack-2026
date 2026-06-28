@@ -55,14 +55,14 @@ console.log('✅ UiPath token received');
         'Content-Type': 'application/json',
         'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
       },
-      body: JSON.stringify({
-        startInfo: {
-          ReleaseKey: releaseKey,
-          Strategy: 'All',
-          RobotIds: [],
-          InputArguments: JSON.stringify({ caseId })
-        }
-      })
+     body: JSON.stringify({
+  startInfo: {
+    ReleaseKey: releaseKey,
+    Strategy: 'ModernJobsCount',  
+    JobsCount: 1,                  
+    InputArguments: JSON.stringify({ caseId })
+  }
+})
     }
   );
 
