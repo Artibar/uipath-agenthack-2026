@@ -59,7 +59,7 @@ export const triggerUiPathJob = async (caseId) => {
             currentAgent: 'intake'
           }
         },
-        { new: true }
+        { returnDocument: 'after' } // ✅ modern option instead of deprecated "new"
       );
       console.log('✅ Case marked as processing:', caseId);
     } catch (dbError) {
@@ -79,7 +79,7 @@ export const triggerUiPathJob = async (caseId) => {
       },
       body: JSON.stringify({
         startInfo: {
-          ReleaseKey: release.Key,   // Use ReleaseKey, not Id
+          ReleaseKey: release.Key,   // ✅ Use Key, not Id
           Strategy: "ModernJobsCount",
           JobsCount: 1,
           InputArguments: "{}"
