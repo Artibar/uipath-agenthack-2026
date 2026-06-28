@@ -1,8 +1,8 @@
-import IntakeCase from '../models/IntakeCase.js'; 
+import IntakeCase from '../models/IntakeCase.js';
 
 export const triggerUiPathJob = async (caseId) => {
   try {
-    // Get token
+    // 🔑 Get token
     const tokenRes = await fetch('https://staging.uipath.com/identity_/connect/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -18,11 +18,11 @@ export const triggerUiPathJob = async (caseId) => {
     const access_token = tokenData.access_token;
     console.log('✅ UiPath token received');
 
-    // Get all releases - FIX: Use /odata/Releases endpoint, NOT /api/Job
-    const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
-    console.log('🌐 Releases URL:', url);
+    // 🌐 Get Releases
+    const releasesUrl = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
+    console.log('🌐 Releases URL:', releasesUrl);
 
-    const releasesRes = await fetch(url, {
+    const releasesRes = await fetch(releasesUrl, {
       headers: {
         Authorization: `Bearer ${access_token}`,
         'Content-Type': 'application/json',
@@ -48,19 +48,15 @@ export const triggerUiPathJob = async (caseId) => {
     console.log('✅ Release found:', release.Name, '(ID:', release.Id, ')');
     console.log('📌 Processing caseId:', caseId);
 
-    // ✅ Mark case as "processing" so BPMN knows to handle it
-    console.log('💾 Updating case status for BPMN:', caseId);
-    
+    // 💾 Update case status
     try {
-      // FIX: Use findOneAndUpdate with caseId field query (not findByIdAndUpdate)
-      // caseId is a STRING like "CASE-1782656929014-784", not a MongoDB ObjectId
       await IntakeCase.findOneAndUpdate(
-        { caseId: caseId },  // Query by caseId field
+        { caseId: caseId },
         {
           $set: {
-            status: 'processing',  // Use existing status from schema
+            status: 'processing',
             uiPathTriggeredAt: new Date(),
-            currentAgent: 'intake'  // Signal BPMN to start
+            currentAgent: 'intake'
           }
         },
         { new: true }
@@ -68,27 +64,28 @@ export const triggerUiPathJob = async (caseId) => {
       console.log('✅ Case marked as processing:', caseId);
     } catch (dbError) {
       console.warn('⚠️ Could not update case status:', dbError.message);
-      // Continue anyway - job is still triggered
     }
 
-    // ✅ FIX: Use /api/Job endpoint (legacy) instead of /odata/Jobs
-    // /odata/Jobs returns 405, so use the legacy API endpoint
-    const jobRes = await fetch(
-      `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/Job`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          'Content-Type': 'application/json',
-          'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
-        },
-        body: JSON.stringify({
-          releaseId: release.Id,
-          strategy: 'All'
-          // NO inputArguments - BPMN will query DB instead
-        })
-      }
-    );
+    // 🚀 Trigger Job using /odata/Jobs
+    const jobsUrl = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs`;
+    console.log('🌐 Jobs URL:', jobsUrl);
+
+    const jobRes = await fetch(jobsUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        'Content-Type': 'application/json',
+        'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
+      },
+      body: JSON.stringify({
+        startInfo: {
+          ReleaseKey: release.Key,   // Use ReleaseKey, not Id
+          Strategy: "ModernJobsCount",
+          JobsCount: 1,
+          InputArguments: "{}"
+        }
+      })
+    });
 
     const jobText = await jobRes.text();
     console.log('📋 Job response status:', jobRes.status);
@@ -106,7 +103,7 @@ export const triggerUiPathJob = async (caseId) => {
     console.log('✅ UiPath job triggered successfully!');
     console.log('📊 Job ID:', job?.Id || job?.value?.[0]?.Id);
     console.log('📌 BPMN will process caseId:', caseId);
-    
+
     return {
       ...job,
       caseId: caseId
