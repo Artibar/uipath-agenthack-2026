@@ -12,6 +12,15 @@ export default function ComplianceAnalyzer() {
 
   const API_BASE_URL = 'https://uipath-agenthack-2026.onrender.com/api';
 
+  // Valid file types for compliance documents
+  const VALID_FILE_TYPES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -27,11 +36,35 @@ export default function ComplianceAnalyzer() {
     e.stopPropagation();
     setDragActive(false);
     const files = e.dataTransfer.files;
-    if (files && files[0]) setFile(files[0]);
+    if (files && files[0]) {
+      validateAndSetFile(files[0]);
+    }
   };
 
   const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) setFile(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) {
+      validateAndSetFile(e.target.files[0]);
+    }
+  };
+
+  const validateAndSetFile = (selectedFile) => {
+    // Check file type
+    if (!VALID_FILE_TYPES.includes(selectedFile.type)) {
+      setError('Invalid file type. Please upload PDF, DOC, DOCX, or TXT');
+      setFile(null);
+      return;
+    }
+
+    // Check file size
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (selectedFile.size / 1024 / 1024).toFixed(1);
+      setError(`File too large. Max size: 25MB. Your file: ${fileSizeMB}MB`);
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+    setError(null); // Clear previous errors when file changes
   };
 
   const getRiskColor = (risk) => {
@@ -68,16 +101,18 @@ export default function ComplianceAnalyzer() {
           return {
             ...v,
             reChecked: true,
-            reCheckResult: response.data.data.reCheckResult.reCheckResult,
-            reCheckConfidence: response.data.data.reCheckResult.confidence,
-            explanation: response.data.data.reCheckResult.explanation
+            // ✅ Add safety checks with optional chaining for missing data
+            reCheckResult: response.data?.data?.reCheckResult?.reCheckResult || 'unknown',
+            reCheckConfidence: response.data?.data?.reCheckResult?.confidence || 0,
+            explanation: response.data?.data?.reCheckResult?.explanation || 'No explanation provided'
           };
         }
         return v;
       });
 
       setResult(prev => ({ ...prev, violations: updatedViolations }));
-      alert(`✅ Violation rechecked: ${response.data.data.reCheckResult.status}`);
+      const status = response.data?.data?.reCheckResult?.status || 'Success';
+      alert(`✅ Violation rechecked: ${status}`);
     } catch (err) {
       console.error('Recheck error:', err);
       alert('⚠️ Recheck failed: ' + (err.response?.data?.message || err.message));
@@ -88,8 +123,23 @@ export default function ComplianceAnalyzer() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation checks
     if (!file) {
       setError("Please select a file");
+      return;
+    }
+
+    // File type validation (double-check, though already validated on selection)
+    if (!VALID_FILE_TYPES.includes(file.type)) {
+      setError('Invalid file type. Please upload PDF, DOC, DOCX, or TXT');
+      return;
+    }
+
+    // File size validation (double-check, though already validated on selection)
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+      setError(`File too large. Max 25MB. Your file: ${fileSizeMB}MB`);
       return;
     }
 
@@ -114,15 +164,17 @@ export default function ComplianceAnalyzer() {
       await axios.post(`${API_BASE_URL}/uipath/trigger/${caseId}`);
       console.log('✅ UiPath triggered');
 
-      // Step 3: Poll until completed
+      // Step 3: Poll until completed (increased timeout: 30 attempts × 4s = 120s max)
       setLoadingStep('polling');
       let finalCase = null;
       let attempts = 0;
-      while (attempts < 20) {
+      const maxAttempts = 30;
+
+      while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 4000));
         const statusRes = await axios.get(`${API_BASE_URL}/workflow/${caseId}`);
         const status = statusRes.data.data.status;
-        console.log(`⏳ Polling status: ${status} (attempt ${attempts + 1})`);
+        console.log(`⏳ Polling status: ${status} (attempt ${attempts + 1}/${maxAttempts})`);
 
         if (status === 'completed') {
           finalCase = statusRes.data.data;
@@ -131,7 +183,9 @@ export default function ComplianceAnalyzer() {
         attempts++;
       }
 
-      if (!finalCase) throw new Error('Processing timed out — please try again');
+      if (!finalCase) {
+        throw new Error(`Processing timed out after ${maxAttempts * 4}s. Try a smaller document or check backend logs.`);
+      }
 
       setResult({
         caseId,
@@ -142,7 +196,7 @@ export default function ComplianceAnalyzer() {
       setFile(null);
     } catch (err) {
       console.error('Full error:', err);
-      setError(err.response?.data?.message || "Processing failed. Check backend logs.");
+      setError(err.response?.data?.message || err.message || "Processing failed. Check backend logs.");
     } finally {
       setLoading(false);
       setLoadingStep('');
@@ -205,7 +259,7 @@ export default function ComplianceAnalyzer() {
                     {file ? 'Click to change' : 'or click to browse'}
                   </p>
                   <p className="text-xs text-slate-500 mt-4">
-                    Supported: PDF, DOC, DOCX • Vendor, Insurance, Loan documents
+                    Supported: PDF, DOC, DOCX, TXT • Max size: 25MB • Vendor, Insurance, Loan documents
                   </p>
                 </label>
               </div>

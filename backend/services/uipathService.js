@@ -36,40 +36,45 @@ export const triggerUiPathJob = async (caseId) => {
   }
 
   const releasesData = JSON.parse(releasesText);
-  const releaseKey = releasesData?.value?.[0]?.Key;
+  const release = releasesData?.value?.[0];
 
-  if (!releaseKey) {
+  if (!release) {
     throw new Error('Maestro BPMN process not found in Orchestrator');
   }
 
-  console.log('✅ Release key found:', releaseKey);
+  console.log('✅ Release found:', release.Name, '(ID:', release.Id, ')');
 
-  // Trigger job
-  // Replace the job trigger section with this:
-
-const jobRes = await fetch(
-  `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/orchestration/process/start`,
-  {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${access_token}`,
-      'Content-Type': 'application/json',
-      'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
-    },
-    body: JSON.stringify({
-      releaseKey: releaseKey,
-      inputArguments: { caseId }
-    })
-  }
-);
+  // ✅ FIX: Use /odata/Jobs endpoint (correct for v2023+)
+  const jobRes = await fetch(
+    `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        'Content-Type': 'application/json',
+        'X-UIPATH-OrganizationUnitId': process.env.UIPATH_FOLDER_ID
+      },
+      body: JSON.stringify({
+        releaseId: release.Id,  // Use releaseId (not releaseKey)
+        strategy: 'All',
+        inputArguments: JSON.stringify({ caseId: caseId })  // Stringify the input
+      })
+    }
+  );
 
   const jobText = await jobRes.text();
   console.log('📋 Job response status:', jobRes.status);
   console.log('📋 Job response:', jobText);
 
-  if (!jobText) throw new Error('Empty response from Jobs API');
+  if (!jobText) {
+    throw new Error(`Empty response from Jobs API. Status: ${jobRes.status}`);
+  }
+
+  if (!jobRes.ok) {
+    throw new Error(`UiPath job creation failed: ${jobRes.status} - ${jobText}`);
+  }
 
   const job = JSON.parse(jobText);
-  console.log('✅ UiPath job triggered:', job);
+  console.log('✅ UiPath job triggered. Job ID:', job?.Id || job?.value?.[0]?.Id);
   return job;
 };
