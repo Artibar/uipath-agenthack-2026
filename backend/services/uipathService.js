@@ -47,8 +47,8 @@ export const triggerUiPathJob = async (caseId) => {
   // Trigger job
   // Replace the job trigger section with this:
 
- const jobRes = await fetch(
-  `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/ProcessOrchestration/StartProcessOrchestration`,
+const jobRes = await fetch(
+  `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/orchestration/process/start`,
   {
     method: 'POST',
     headers: {
@@ -58,7 +58,7 @@ export const triggerUiPathJob = async (caseId) => {
     },
     body: JSON.stringify({
       releaseKey: releaseKey,
-      inputArguments: { caseId }  // ✅ no JSON.stringify needed here
+      inputArguments: { caseId }
     })
   }
 );
