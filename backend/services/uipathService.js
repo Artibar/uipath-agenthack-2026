@@ -11,11 +11,9 @@ export const triggerUiPathJob = async (caseId) => {
   })
 });
   const tokenData = await tokenRes.json();
-  const access_token = tokenData.access_token;
-  console.log('✅ UiPath token received');
-  console.log('🔑 Account:', process.env.UIPATH_ACCOUNT);
-  console.log('🔑 Tenant:', process.env.UIPATH_TENANT);
-  console.log('🔑 Folder ID:', process.env.UIPATH_FOLDER_ID);
+console.log('🔑 Full token response:', JSON.stringify(tokenData));
+const access_token = tokenData.access_token;
+console.log('✅ UiPath token received');
 
   // ✅ Try without filter first — get ALL releases
   const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
