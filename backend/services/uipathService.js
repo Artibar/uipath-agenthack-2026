@@ -1,3 +1,5 @@
+import IntakeCase from '../models/IntakeCase.js'; 
+
 export const triggerUiPathJob = async (caseId) => {
   try {
     // Get token
@@ -44,31 +46,26 @@ export const triggerUiPathJob = async (caseId) => {
     }
 
     console.log('✅ Release found:', release.Name, '(ID:', release.Id, ')');
+    console.log('📌 Processing caseId:', caseId);
 
-    // ✅ NEW: Store caseId for BPMN to retrieve
-    // This allows BPMN to know which case to process without inputArguments
-    console.log('💾 Storing caseId for BPMN to retrieve:', caseId);
-    
-    // Store in a uipath_job_context collection so BPMN can query it
-    const Case = require('../models/Case'); // Adjust path based on your structure
+    // ✅ Mark case as "processing" so BPMN knows to handle it
+    console.log('💾 Updating case status for BPMN:', caseId);
     
     try {
-      // Mark the case as ready for BPMN processing
-      await Case.findByIdAndUpdate(caseId, {
+      await IntakeCase.findByIdAndUpdate(caseId, {
         $set: {
-          status: 'pending-orchestration',
+          status: 'processing',  // ✅ Use existing status from schema
           uiPathTriggeredAt: new Date(),
-          lastAssignedToOrchestrator: true
+          currentAgent: 'intake'  // Signal BPMN to start
         }
-      });
-      console.log('✅ Case marked for BPMN processing:', caseId);
+      }, { new: true });
+      console.log('✅ Case marked as processing:', caseId);
     } catch (dbError) {
-      console.warn('⚠️ Could not update case in DB:', dbError.message);
-      // Continue anyway - BPMN will fetch latest pending case
+      console.warn('⚠️ Could not update case status:', dbError.message);
+      // Continue anyway - job is still triggered
     }
 
-    // ✅ FIXED: Remove inputArguments completely (was causing 405 error)
-    // BPMN will query MongoDB for the latest pending case on startup
+    // ✅ Trigger UiPath job WITHOUT inputArguments (fixes 405 error)
     const jobRes = await fetch(
       `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs`,
       {
@@ -81,7 +78,7 @@ export const triggerUiPathJob = async (caseId) => {
         body: JSON.stringify({
           releaseId: release.Id,
           strategy: 'All'
-          // ✅ NO inputArguments (was causing 405)
+          // ✅ NO inputArguments - BPMN will query DB instead
         })
       }
     );
@@ -99,12 +96,13 @@ export const triggerUiPathJob = async (caseId) => {
     }
 
     const job = JSON.parse(jobText);
-    console.log('✅ UiPath job triggered. Job ID:', job?.Id || job?.value?.[0]?.Id);
+    console.log('✅ UiPath job triggered successfully!');
+    console.log('📊 Job ID:', job?.Id || job?.value?.[0]?.Id);
     console.log('📌 BPMN will process caseId:', caseId);
     
     return {
       ...job,
-      caseId: caseId  // Return caseId for reference
+      caseId: caseId
     };
   } catch (error) {
     console.error('❌ UiPath error:', error.message);
