@@ -19,7 +19,7 @@ export const triggerUiPathJob = async (caseId) => {
     console.log('✅ UiPath token received');
 
     // Get all releases
-    const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
+    const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/Job`;
     console.log('🌐 Releases URL:', url);
 
     const releasesRes = await fetch(url, {
