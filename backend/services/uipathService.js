@@ -18,8 +18,8 @@ export const triggerUiPathJob = async (caseId) => {
     const access_token = tokenData.access_token;
     console.log('✅ UiPath token received');
 
-    // Get all releases
-    const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/Job`;
+    // Get all releases - FIX: Use /odata/Releases endpoint, NOT /api/Job
+    const url = `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Releases`;
     console.log('🌐 Releases URL:', url);
 
     const releasesRes = await fetch(url, {
@@ -52,22 +52,29 @@ export const triggerUiPathJob = async (caseId) => {
     console.log('💾 Updating case status for BPMN:', caseId);
     
     try {
-      await IntakeCase.findByIdAndUpdate(caseId, {
-        $set: {
-          status: 'processing',  // ✅ Use existing status from schema
-          uiPathTriggeredAt: new Date(),
-          currentAgent: 'intake'  // Signal BPMN to start
-        }
-      }, { new: true });
+      // FIX: Use findOneAndUpdate with caseId field query (not findByIdAndUpdate)
+      // caseId is a STRING like "CASE-1782656929014-784", not a MongoDB ObjectId
+      await IntakeCase.findOneAndUpdate(
+        { caseId: caseId },  // Query by caseId field
+        {
+          $set: {
+            status: 'processing',  // Use existing status from schema
+            uiPathTriggeredAt: new Date(),
+            currentAgent: 'intake'  // Signal BPMN to start
+          }
+        },
+        { new: true }
+      );
       console.log('✅ Case marked as processing:', caseId);
     } catch (dbError) {
       console.warn('⚠️ Could not update case status:', dbError.message);
       // Continue anyway - job is still triggered
     }
 
-    // ✅ Trigger UiPath job WITHOUT inputArguments (fixes 405 error)
+    // ✅ FIX: Use /api/Job endpoint (legacy) instead of /odata/Jobs
+    // /odata/Jobs returns 405, so use the legacy API endpoint
     const jobRes = await fetch(
-      `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/odata/Jobs`,
+      `https://staging.uipath.com/${process.env.UIPATH_ACCOUNT}/${process.env.UIPATH_TENANT}/orchestrator_/api/Job`,
       {
         method: 'POST',
         headers: {
@@ -78,7 +85,7 @@ export const triggerUiPathJob = async (caseId) => {
         body: JSON.stringify({
           releaseId: release.Id,
           strategy: 'All'
-          // ✅ NO inputArguments - BPMN will query DB instead
+          // NO inputArguments - BPMN will query DB instead
         })
       }
     );
