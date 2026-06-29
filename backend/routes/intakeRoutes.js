@@ -1,33 +1,38 @@
-import express from 'express'
-import {upload} from '../middleware/uploadMiddleware.js'
-import {uploadDocument, getCase} from '../controllers/intakeController.js'
+import express from 'express';
+import { upload } from '../middleware/uploadMiddleware.js';
+import { uploadDocument, getCase } from '../controllers/intakeController.js';
 
-const router = express.Router()
+const router = express.Router();
 
-console.log('✅ Routes loaded');
+console.log('✅ Intake routes loaded');
 
-router.post('/upload', upload.single('document'), async (req, res) => {
+// Upload document route
+router.post('/upload', upload, async (req, res) => {
   try {
     console.log('📥 Upload endpoint hit');
-    console.log('📁 File received:', req.file ? req.file.originalname : 'no file');
-    
+    console.log(
+      '📁 File received:',
+      req.file ? req.file.originalname : 'no file'
+    );
+
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Document file required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Document file required',
       });
     }
- 
-    // Pass to uploadDocument controller
+
     await uploadDocument(req, res);
   } catch (err) {
-    console.error('❌ Upload error:', err.message);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to process document upload' 
+    console.error('❌ Upload error:', err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to process document upload',
     });
   }
 });
- 
 
-export default router
+// Optional case lookup route (only if your controller has getCase)
+router.get('/case/:caseId', getCase);
+
+export default router;
