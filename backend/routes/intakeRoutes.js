@@ -6,12 +6,26 @@ const router = express.Router()
 
 console.log('✅ Routes loaded');
 
-router.post('/upload', (req, res, next) => {
-    console.log('📨 Content-Type:', req.headers['content-type']);
-    console.log('📨 Body:', req.body ? Object.keys(req.body) : 'empty');  // ✅ FIXED
+router.post('/upload', async (req, res, next) => {
+  try {
+    const { documentUrl, caseId } = req.body;
+    if (!documentUrl) {
+      return res.status(400).json({ success: false, message: 'documentUrl required' });
+    }
+    const response = await fetch(documentUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    req.file = {
+      buffer,
+      originalname: documentUrl.split('/').pop(),
+      mimetype: response.headers.get('content-type') || 'application/octet-stream',
+      size: buffer.length
+    };
+    req.body.caseId = caseId;
     next();
-}, upload, uploadDocument)
-
-router.get('/:caseId', getCase)
-
-export default router
+  } catch (err) {
+    console.error('❌ URL fetch error:', err);
+    res.status(400).json({ success: false, message: 'Failed to fetch document from URL' });
+  }
+}, uploadDocument);
