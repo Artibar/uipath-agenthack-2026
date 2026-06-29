@@ -30,15 +30,25 @@ const intakeCaseSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "processing", "uploaded", "extracting", "extracted", "checking",          
-    "checked",            
-    "analyzing",          
-    "analyzed",           
-    "reporting",          
-    "pending_recheck",    
-    "rechecked",          
-    "recheck_failed" , "completed", "failed", "pending_recheck", "rechecked",  "retrieving",     
-    "retrieved",], 
+    enum: [
+      "pending",
+      "processing",
+      "uploaded",
+      "extracting",
+      "extracted",
+      "retrieving",
+      "retrieved",
+      "checking",
+      "checked",
+      "analyzing",
+      "analyzed",
+      "reporting",
+      "completed",
+      "pending_recheck",
+      "rechecked",
+      "recheck_failed",
+      "failed"
+    ],
     default: "pending",
   },
   extractedText: {
@@ -65,14 +75,14 @@ const intakeCaseSchema = new mongoose.Schema({
       reason: String,
       severity: String,
       
-      // ✅ ADD THESE FOR RECHECK
+      // ✅ Recheck fields
       reChecked: {
         type: Boolean,
         default: false
       },
       reCheckResult: {
         type: String,
-        enum: ["confirmed", "overturned", null],
+        enum: ["confirmed", "overturned"],
         default: null
       },
       reCheckConfidence: {
