@@ -6,28 +6,28 @@ const router = express.Router()
 
 console.log('✅ Routes loaded');
 
-router.post('/upload', async (req, res, next) => {
+router.post('/upload', upload.single('document'), async (req, res) => {
   try {
-    const { documentUrl, caseId } = req.body;
-    if (!documentUrl) {
-      return res.status(400).json({ success: false, message: 'documentUrl required' });
+    console.log('📥 Upload endpoint hit');
+    console.log('📁 File received:', req.file ? req.file.originalname : 'no file');
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Document file required' 
+      });
     }
-    const response = await fetch(documentUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    req.file = {
-      buffer,
-      originalname: documentUrl.split('/').pop(),
-      mimetype: response.headers.get('content-type') || 'application/octet-stream',
-      size: buffer.length
-    };
-    req.body.caseId = caseId;
-    next();
+ 
+    // Pass to uploadDocument controller
+    await uploadDocument(req, res);
   } catch (err) {
-    console.error('❌ URL fetch error:', err);
-    res.status(400).json({ success: false, message: 'Failed to fetch document from URL' });
+    console.error('❌ Upload error:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to process document upload' 
+    });
   }
-}, uploadDocument);
+});
+ 
 
 export default router
