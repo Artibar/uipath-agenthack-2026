@@ -15,6 +15,7 @@ export const triggerUiPathJob = async (caseId) => {
 
   // ✅ Use API Trigger URL directly
   const triggerUrl = process.env.UIPATH_TRIGGER_URL; // set this in Render env
+  console.log('🔗 Using trigger URL:', process.env.UIPATH_TRIGGER_URL);
   
   const jobRes = await fetch(triggerUrl, {
     method: 'POST',
