@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Routes
+import debugRoutes from './routes/debugRoutes.js';
 import extractionRoutes from './routes/extractionRoutes.js';
 import workflowRoutes from "./routes/workflowRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
@@ -90,6 +91,7 @@ async function startServer() {
         // ============================================
         // ROUTES
         // ============================================
+        app.use('/api/debug', debugRoutes);
         app.use('/api/intake', intakeRoutes);
         app.use('/api/extraction', extractionRoutes);
         app.use('/api/workflow', workflowRoutes);
