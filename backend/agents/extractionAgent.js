@@ -6,11 +6,11 @@ import { extractedUrlText } from '../services/urlService.js'
 import fs from 'fs'
 import path from 'path'
 
-export const extractionAgent = async(caseId) => {
+export const extractionAgent = async (caseId) => {
     let intakeCase;
     try {
-        intakeCase = await IntakeCase.findOne({caseId})
-        if(!intakeCase){
+        intakeCase = await IntakeCase.findOne({ caseId })
+        if (!intakeCase) {
             throw new Error("Case not found")
         }
 
@@ -21,7 +21,7 @@ export const extractionAgent = async(caseId) => {
 
         intakeCase.status = 'extracting';
         intakeCase.processingHistory.push({
-            agent:"extraction",
+            agent: "extraction",
             action: "started",
             timestamp: new Date(),
         });
@@ -36,22 +36,22 @@ export const extractionAgent = async(caseId) => {
         }
 
         const extractors = {
-            pdf: async(source) => {
+            pdf: async (source) => {
                 console.log('  🔍 Extracting PDF from:', source);
                 const result = await extractPdfText(source);
                 return result.text || result;
             },
-            docx: async(source) => {
+            docx: async (source) => {
                 console.log('  🔍 Extracting DOCX from:', source);
                 const result = await extractDocxText(source);
                 return result.text || result;
             },
-            video: async(source) => {
+            video: async (source) => {
                 console.log('  🔍 Extracting Video from:', source);
                 const result = await extractVideoText(source);
                 return result.text || result;
             },
-            url: async(source) => {
+            url: async (source) => {
                 console.log('  🔍 Extracting URL from:', source);
                 const result = await extractedUrlText(source);
                 return result.text || result;
@@ -59,7 +59,7 @@ export const extractionAgent = async(caseId) => {
         };
 
         const extractor = extractors[docType];
-        if(!extractor){
+        if (!extractor) {
             throw new Error(
                 `Unsupported document type: ${docType}. Supported: pdf, docx, video, url`
             )
@@ -67,7 +67,16 @@ export const extractionAgent = async(caseId) => {
 
         // Extract text
         let extractedText = await extractor(intakeCase.source)
-        
+
+        // ✅ ADD THIS DEBUG
+        console.log('📝 Extracted text length:', extractedText?.length);
+        console.log('📝 Extracted text preview:', extractedText?.substring(0, 200));
+
+        if (!extractedText || extractedText.trim().length === 0) {
+            throw new Error('Extraction returned empty text — document may be corrupted or unsupported');
+        }
+
+
         // Ensure it's a string
         if (typeof extractedText !== 'string') {
             extractedText = JSON.stringify(extractedText);
@@ -84,7 +93,7 @@ export const extractionAgent = async(caseId) => {
         intakeCase.status = "extracted";
         intakeCase.currentAgent = "retrieval";
         intakeCase.processingHistory.push({
-            agent:"extraction",
+            agent: "extraction",
             action: "completed",
             timestamp: new Date(),
             metadata: {
@@ -97,7 +106,7 @@ export const extractionAgent = async(caseId) => {
 
         console.log('✅ EXTRACTION COMPLETE');
 
-        return{
+        return {
             caseId,
             extractionType: docType,
             wordCount,
@@ -108,8 +117,8 @@ export const extractionAgent = async(caseId) => {
     } catch (error) {
         console.error('❌ EXTRACTION ERROR:', error.message);
         console.error('  Stack:', error.stack);
-        
-        if(intakeCase){
+
+        if (intakeCase) {
             intakeCase.status = "failed";
             intakeCase.processingHistory.push({
                 agent: "extraction",
