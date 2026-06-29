@@ -29,3 +29,5 @@ router.post('/upload', async (req, res, next) => {
     res.status(400).json({ success: false, message: 'Failed to fetch document from URL' });
   }
 }, uploadDocument);
+
+export default router
