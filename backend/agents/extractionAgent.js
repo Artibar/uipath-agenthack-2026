@@ -17,7 +17,7 @@ export const extractionAgent = async (caseId) => {
         console.log('📖 Extraction starting...');
         console.log('  Document Type:', intakeCase.documentType);
         console.log('  Source:', intakeCase.source);
-        console.log('  File exists:', intakeCase.source ? fs.existsSync(intakeCase.source) : false);
+        console.log("Remote source URL:", intakeCase.source);
 
         intakeCase.status = 'extracting';
         intakeCase.processingHistory.push({

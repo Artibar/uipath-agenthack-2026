@@ -5,8 +5,12 @@ import { extractionAgent } from "../agents/extractionAgent.js";
 
 export const runExtraction = async (req, res) => {
   try {
-    const { caseId } = req.params;
+     console.log("PARAMS:", req.params);
+    console.log("CASE ID RECEIVED:", req.params.caseId);
 
+   
+    const { caseId } = req.params;
+ 
     const result = await extractionAgent(caseId);
     const extractedText = result.extractedText;
 
